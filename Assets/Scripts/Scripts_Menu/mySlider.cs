@@ -6,7 +6,8 @@ using UnityEngine.UI;
 
 public class mySlider : MonoBehaviour
 {
-    private Slider _slider;
+    [SerializeField] private Slider _slider;
+    [SerializeField] private AudioSource _bgMmusic;
     public TextMeshProUGUI sliderText;   // get from inspector
 
     void Awake()
@@ -23,11 +24,17 @@ public class mySlider : MonoBehaviour
         if (_slider != null && sliderText != null)
         {
             if (sliderText.name == "Txt_textDollar")
+            {
                 sliderText.text = _slider.value.ToString("0") + "$"; // show as integer$
+            }
             else
-                sliderText.text = _slider.value.ToString("0"); // show as integer
+            {
+                sliderText.text = _slider.value.ToString("0"); // show as integer - the music button
+                if (_bgMmusic != null)
+                    _bgMmusic.volume = (float)_slider.value / _slider.maxValue; // normalize to 0..1
 
+            }
         }
-
     }
+
 }
