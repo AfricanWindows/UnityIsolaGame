@@ -167,7 +167,7 @@ public class GameLogic : MonoBehaviour
 
                 Redraw();
 
-                // ✅ play step sound
+                // play step sound
                 if (stepSound != null)
                     stepSound.Play();
 
