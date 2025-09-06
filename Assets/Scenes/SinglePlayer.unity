@@ -427,7 +427,7 @@ GameObject:
   m_Layer: 5
   m_Name: Screen_MultiPlayer
   m_TagString: UnityObject
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 3936346786652291628, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -1261,7 +1261,7 @@ GameObject:
   m_Layer: 0
   m_Name: Sound_winner
   m_TagString: Untagged
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 2974397684917235467, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -1389,7 +1389,7 @@ GameObject:
   m_Layer: 0
   m_Name: bg_music
   m_TagString: Untagged
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 2974397684917235467, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -4874,7 +4874,7 @@ GameObject:
   m_Layer: 0
   m_Name: Sound_step
   m_TagString: Untagged
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 2974397684917235467, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -5137,7 +5137,7 @@ GameObject:
   m_Layer: 5
   m_Name: Image_bg
   m_TagString: Untagged
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: -1412012063857583412, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -5286,7 +5286,7 @@ GameObject:
   m_Layer: 5
   m_Name: Screen_PlayingMulti
   m_TagString: UnityObject
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 3936346786652291628, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -5324,7 +5324,7 @@ GameObject:
   m_Layer: 5
   m_Name: Screen_StudentInfo
   m_TagString: UnityObject
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 3936346786652291628, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -5365,7 +5365,7 @@ GameObject:
   m_Layer: 5
   m_Name: Screen_MainMenu
   m_TagString: UnityObject
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 3936346786652291628, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -6013,7 +6013,7 @@ GameObject:
   m_Layer: 0
   m_Name: Screen_SinglePlayerGame
   m_TagString: UnityObject
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 3936346786652291628, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -7620,7 +7620,7 @@ GameObject:
   m_Layer: 5
   m_Name: Screen_SinglePlayer
   m_TagString: UnityObject
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 3936346786652291628, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -8274,7 +8274,7 @@ GameObject:
   m_Layer: 0
   m_Name: Sound_breaking
   m_TagString: Untagged
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 2974397684917235467, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
@@ -9114,7 +9114,7 @@ GameObject:
   m_Layer: 5
   m_Name: Screen_Options
   m_TagString: UnityObject
-  m_Icon: {fileID: 0}
+  m_Icon: {fileID: 3936346786652291628, guid: 0000000000000000d000000000000000, type: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1

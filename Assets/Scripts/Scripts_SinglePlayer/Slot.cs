@@ -6,6 +6,11 @@ public class Slot : MonoBehaviour
     public static Action<int> OnClickSlot;
     public SpriteRenderer curImage;
     public int slotIndex;
+    [SerializeField] private GameObject _highlight;
+    void Awake()
+    {
+        _highlight.SetActive(false);
+    }
 
     void OnMouseDown()
     {
@@ -21,5 +26,13 @@ public class Slot : MonoBehaviour
     {
         var col = GetComponent<BoxCollider2D>();
         if (col != null) col.enabled = enabled;
+    }
+    void OnMouseEnter()
+    {
+        _highlight.SetActive(true);
+    }
+    void OnMouseExit()
+    {
+        _highlight.SetActive(false);
     }
 }
