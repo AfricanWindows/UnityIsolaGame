@@ -82,8 +82,8 @@ public class MenuLogic : MonoBehaviour
     public void Btn_SinglePlayer()
     {
         Debug.Log("Btn_SinglePlayer");
-        // ChangeScreen(Screens.SinglePlayer);
         img_bg.SetActive(false);
+        ChangeScreen(Screens.SinglePlayer);
         ChangeScreen(Screens.SinglePlayerGame);
     }
 
