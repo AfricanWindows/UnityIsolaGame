@@ -8244,7 +8244,7 @@ MonoBehaviour:
   bluePlayerSprite: {fileID: 21300000, guid: ba297e19d880a174e83f7de8aad60782, type: 3}
   redPlayerSprite: {fileID: 21300000, guid: 988fc4bf213405742a13afc4e57ec6bc, type: 3}
   brokenSprite: {fileID: 21300000, guid: f2504edfa1da4a34fbe4c2bdc01c9cbf, type: 3}
-  _gameOverPopup: {fileID: 948594982}
+  _gameOverPopup: {fileID: 1497426666}
   _gameOverText: {fileID: 1139272209}
   _whosTurnText: {fileID: 1671773222}
   gameoverSound: {fileID: 348158518}

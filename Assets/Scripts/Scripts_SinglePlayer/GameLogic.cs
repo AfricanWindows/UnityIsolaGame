@@ -231,11 +231,8 @@ public class GameLogic : MonoBehaviour
 
     private void ShowTurnText(string tx)
     {
-        if (tx != null)
-        {
-            Debug.Log(tx);
+        if (_whosTurnText != null)
             _whosTurnText.text = tx;
-        }
     }
 
 
