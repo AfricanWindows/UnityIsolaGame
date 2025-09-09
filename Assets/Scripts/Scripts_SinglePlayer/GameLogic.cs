@@ -30,21 +30,22 @@ public class GameLogic : MonoBehaviour
     private enum Phase { Move, Break }
     private Phase phase = Phase.Move;   // first phase is move
 
-    private bool gameOver = false;
+    private bool _gameOver = false;
 
     [Header("UI GameOver Popup")]
-    [SerializeField] private GameObject gameOverPopup; // drag PopupGameOver here
-    [SerializeField] private TextMeshProUGUI gameOverText;  // text to show winner
+    [SerializeField] private GameObject _gameOverPopup; // drag PopupGameOver here
+    [SerializeField] private TextMeshProUGUI _gameOverText;  // text to show winner
+    [SerializeField] private TextMeshProUGUI _whosTurnText;  // text to show winner
 
-    private float aiDelayMove = 0.5f;
-    private float aiDelayBreak = 0.2f;
+    private float _aiDelayMove = 0.5f;
+    private float _aiDelayBreak = 0.2f;
 
     [Header("Sounds")]
     public AudioSource gameoverSound;
     public AudioSource stepSound;
     public AudioSource breakingSound;
 
-    private bool aiBusy = false;
+    private bool _aiBusy = false;
 
     // ---------------- UNITY EVENTS ----------------
     void OnEnable()
@@ -61,8 +62,8 @@ public class GameLogic : MonoBehaviour
 
     void Start()
     {
-        if (gameOverPopup != null)
-            gameOverPopup.SetActive(false); // hide popup at start
+        if (_gameOverPopup != null)
+            _gameOverPopup.SetActive(false); // hide popup at start
         // build visual grid
         BuildBoard();
 
@@ -75,6 +76,9 @@ public class GameLogic : MonoBehaviour
 
         // draw everything
         Redraw();
+
+        ShowTurnText("BLUE TURN");
+
 
         // check if already stuck
         if (CheckImmediateGameOver()) return;
@@ -111,7 +115,7 @@ public class GameLogic : MonoBehaviour
         _board.ResetStart();   // reset board with 2 players
         current = Player.P1;   // blue starts
         phase = Phase.Move;
-        gameOver = false;
+        _gameOver = false;
     }
 
 
@@ -123,12 +127,14 @@ public class GameLogic : MonoBehaviour
         Debug.Log("GameLogic: Restarting game");
 
         // hide gameover UI
-        if (gameOverPopup != null)
-            gameOverPopup.SetActive(false);
+        if (_gameOverPopup != null)
+            _gameOverPopup.SetActive(false);
 
         // reset data
         _board = new GameBoard(width, height);
         _check = new BoardStateCheck();
+        ShowTurnText("BLUE TURN");
+
 
         // reset players + flags
         PlacePlayersStart();
@@ -147,9 +153,9 @@ public class GameLogic : MonoBehaviour
     // ---------------- PLAYER INPUT ----------------
     private void OnClickSlot(int slotIndex)
     {
-        if (gameOver) return;             // stop if finished
+        if (_gameOver) return;             // stop if finished
         if (current == Player.P2) return; // only blue clicks
-        if (aiBusy) return;               // ignore while AI is thinking
+        if (_aiBusy) return;               // ignore while AI is thinking
         if (!_check.IndexInBounds(_board, slotIndex)) return;
 
         if (phase == Phase.Move)
@@ -207,6 +213,9 @@ public class GameLogic : MonoBehaviour
                 current = Player.P2;
                 phase = Phase.Move;
 
+                ShowTurnText("RED TURN");
+
+
                 // check if red has any moves
                 if (!_check.CurrentHasMove(_board, false))
                 {
@@ -220,26 +229,35 @@ public class GameLogic : MonoBehaviour
         }
     }
 
+    private void ShowTurnText(string tx)
+    {
+        if (tx != null)
+        {
+            Debug.Log(tx);
+            _whosTurnText.text = tx;
+        }
+    }
+
 
     // ---------------- AI LOGIC ----------------
     private void TryStartRedAI()
     {
-        if (!gameOver && current == Player.P2 && !aiBusy)
+        if (!_gameOver && current == Player.P2 && !_aiBusy)
             StartCoroutine(RedTurn());
     }
 
     private IEnumerator RedTurn()
     {
-        aiBusy = true;
+        _aiBusy = true;
 
         // wait a bit before making the AI move
-        yield return new WaitForSeconds(aiDelayMove);
+        yield return new WaitForSeconds(_aiDelayMove);
 
         // if red cannot move, blue wins
         if (!_check.CurrentHasMove(_board, false))
         {
             EndGame(Player.P1, "Red stuck");
-            aiBusy = false;
+            _aiBusy = false;
             yield break;
         }
 
@@ -258,7 +276,7 @@ public class GameLogic : MonoBehaviour
             stepSound.Play();
 
         // optional: short delay after move too
-        yield return new WaitForSeconds(aiDelayMove);
+        yield return new WaitForSeconds(_aiDelayMove);
 
         // BREAK (pick random empty cell)
         var empties = _board.GetAllEmpty();
@@ -272,14 +290,14 @@ public class GameLogic : MonoBehaviour
         }
 
         Redraw();
-        yield return new WaitForSeconds(aiDelayBreak);
+        yield return new WaitForSeconds(_aiDelayBreak);
 
         // check if red trapped itself
         if (!_board.AreAdjacent(_board.GetP1Pos(), _board.GetP2Pos()) &&
             !_check.CurrentHasMove(_board, false))
         {
             EndGame(Player.P1, "Red trapped itself");
-            aiBusy = false;
+            _aiBusy = false;
             yield break;
         }
 
@@ -287,15 +305,17 @@ public class GameLogic : MonoBehaviour
         current = Player.P1;
         phase = Phase.Move;
 
+        ShowTurnText("BLUE TURN");
+
         // if blue is stuck now, red wins
         if (!_check.CurrentHasMove(_board, true))
         {
             EndGame(Player.P2, "Blue stuck");
-            aiBusy = false;
+            _aiBusy = false;
             yield break;
         }
 
-        aiBusy = false;
+        _aiBusy = false;
     }
 
 
@@ -337,16 +357,16 @@ public class GameLogic : MonoBehaviour
     // ---------------- GAME OVER ----------------
     private void EndGame(Player winner, string reason)
     {
-        gameOver = true;
+        _gameOver = true;
         Debug.Log($"Game Over! {reason}. Winner: {NameOf(winner)}");
         if (gameoverSound != null)
             gameoverSound.Play();
 
-        if (gameOverPopup != null)
-            gameOverPopup.SetActive(true);
+        if (_gameOverPopup != null)
+            _gameOverPopup.SetActive(true);
 
-        if (gameOverText != null)
-            gameOverText.text = $"Winner: {NameOf(winner)}";
+        if (_gameOverText != null)
+            _gameOverText.text = $"Winner: {NameOf(winner)}";
     }
 
     private bool CheckImmediateGameOver()
