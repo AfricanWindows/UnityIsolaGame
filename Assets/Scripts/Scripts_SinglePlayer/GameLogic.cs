@@ -25,7 +25,7 @@ public class GameLogic : MonoBehaviour
     private BoardStateCheck _check; // helper for rules
 
     private enum Player { P1, P2 }
-    private Player current = Player.P1; // blue starts
+    private Player _current = Player.P1; // blue starts
 
     private enum Phase { Move, Break }
     private Phase phase = Phase.Move;   // first phase is move
@@ -113,7 +113,7 @@ public class GameLogic : MonoBehaviour
     private void PlacePlayersStart()
     {
         _board.ResetStart();   // reset board with 2 players
-        current = Player.P1;   // blue starts
+        _current = Player.P1;   // blue starts
         phase = Phase.Move;
         _gameOver = false;
     }
@@ -154,7 +154,7 @@ public class GameLogic : MonoBehaviour
     private void OnClickSlot(int slotIndex)
     {
         if (_gameOver) return;             // stop if finished
-        if (current == Player.P2) return; // only blue clicks
+        if (_current == Player.P2) return; // only blue clicks
         if (_aiBusy) return;               // ignore while AI is thinking
         if (!_check.IndexInBounds(_board, slotIndex)) return;
 
@@ -210,7 +210,7 @@ public class GameLogic : MonoBehaviour
                 }
 
                 // switch turn to red
-                current = Player.P2;
+                _current = Player.P2;
                 phase = Phase.Move;
 
                 ShowTurnText("RED TURN");
@@ -239,7 +239,7 @@ public class GameLogic : MonoBehaviour
     // ---------------- AI LOGIC ----------------
     private void TryStartRedAI()
     {
-        if (!_gameOver && current == Player.P2 && !_aiBusy)
+        if (!_gameOver && _current == Player.P2 && !_aiBusy)
             StartCoroutine(RedTurn());
     }
 
@@ -299,7 +299,7 @@ public class GameLogic : MonoBehaviour
         }
 
         // switch back to blue
-        current = Player.P1;
+        _current = Player.P1;
         phase = Phase.Move;
 
         ShowTurnText("BLUE TURN");
@@ -368,10 +368,10 @@ public class GameLogic : MonoBehaviour
 
     private bool CheckImmediateGameOver()
     {
-        bool currentIsP1 = (current == Player.P1);
+        bool currentIsP1 = (_current == Player.P1);
         if (!_check.CurrentHasMove(_board, currentIsP1))
         {
-            EndGame(Other(current), $"{NameOf(current)} stuck");
+            EndGame(Other(_current), $"{NameOf(_current)} stuck");
             return true;
         }
         return false;
