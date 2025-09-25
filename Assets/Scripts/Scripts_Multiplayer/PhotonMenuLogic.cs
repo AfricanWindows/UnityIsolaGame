@@ -11,7 +11,6 @@ using UnityEngine.UI;
 public class PhotonMenuLogic : MonoBehaviourPunCallbacks
 {
     public static Action OnStartGame;
-    [SerializeField] private GameObject img_bg;
 
     private Dictionary<string, GameObject> phObjects;
     private int searchValue = 100;

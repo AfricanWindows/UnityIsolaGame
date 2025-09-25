@@ -2,6 +2,7 @@ using System.Collections;
 using Photon.Pun;
 using Photon.Pun.UtilityScripts;
 using TMPro;
+using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.UI;
 using SlotState = GameBoard.SlotState;  // shorter name
@@ -56,17 +57,19 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     {
         Slot.OnClickSlot += OnClickSlot;
         Btn_Restart.OnClickRestart += OnClickRestart;
+        PhotonMenuLogic.OnStartGame += OnStartGame;
     }
     public override void OnDisable()
     {
         Slot.OnClickSlot -= OnClickSlot;
         Btn_Restart.OnClickRestart -= OnClickRestart;
+        PhotonMenuLogic.OnStartGame -= OnStartGame;
 
     }
 
     private void OnStartGame()
     {
-        
+        Debug.Log("OnStartGame");
     }
 
     void Start()
@@ -90,10 +93,10 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
 
 
         // check if already stuck
-        if (CheckImmediateGameOver()) return;
+        // if (CheckImmediateGameOver()) return;
 
         // if it's red's turn, start AI
-        TryStartRedAI();
+        // TryStartRedAI();
     }
 
     // ---------------- BUILD ----------------
@@ -152,10 +155,10 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
         Redraw();
 
         // check gameover at start
-        if (CheckImmediateGameOver()) return;
+        // if (CheckImmediateGameOver()) return;
 
         // if red’s turn -> AI
-        TryStartRedAI();
+        // TryStartRedAI();
     }
 
 
@@ -392,6 +395,7 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
 
 
 
+    #region Server Events
 
     public void OnTurnBegins(int turn)
     {
@@ -412,4 +416,6 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     public void OnTurnTimeEnds(int turn)
     {
     }
+
+    #endregion
 }

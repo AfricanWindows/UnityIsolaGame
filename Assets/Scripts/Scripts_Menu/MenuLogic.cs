@@ -19,24 +19,7 @@ public class MenuLogic : MonoBehaviour
     private Stack<Screens> _history = new Stack<Screens>(); // Stack instead of _prevScreen
     private Dictionary<string, GameObject> _unityObjects;
 
-    void OnEnable()
-    {
-        PhotonMenuLogic.OnStartGame += OnStartGame;
-    }
-    void OnDisable()
-    {
-        PhotonMenuLogic.OnStartGame -= OnStartGame;
-    }
-
-    private void OnStartGame()
-    {
-        foreach (GameObject s in _unityObjects.Values)
-        {
-            s.SetActive(false);
-        }
-        img_bg.SetActive(false);
-        _unityObjects["Screen_MultiPlayer"].SetActive(true);
-    }
+    
 
     void Awake()
     {
@@ -62,13 +45,6 @@ public class MenuLogic : MonoBehaviour
     {
         _history.Clear();   // for safety
         _currentScreen = Screens.MainMenu;
-
-        // _unityObjects["Screen_MainMenu"].SetActive(true);
-        // _unityObjects["Screen_SinglePlayer"].SetActive(false);
-        // _unityObjects["Screen_Options"].SetActive(false);
-        // _unityObjects["Screen_MultiPlayer"].SetActive(false);
-        // _unityObjects["Screen_StudentInfo"].SetActive(false);
-        // _unityObjects["Screen_PlayingMulti"].SetActive(false);
 
         foreach (GameObject s in _unityObjects.Values)
         {
@@ -116,12 +92,6 @@ public class MenuLogic : MonoBehaviour
         Debug.Log("Btn_StudentInfo");
         ChangeScreen(Screens.StudentInfo);
     }
-    // public void Btn_PlayingMulti()
-    // {
-    //     Debug.Log("Btn_MultiPlayer");
-    //     img_bg.SetActive(false);
-    //     ChangeScreen(Screens.MultiPlayer);
-    // }
 
     public void Btn_Options()
     {
