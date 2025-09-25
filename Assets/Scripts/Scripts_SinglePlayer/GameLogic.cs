@@ -38,7 +38,7 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     private enum Player { P1, P2 }
     private Player _current = Player.P1; // which logical player is moving now
 
-    private Player _myPlayer = Player.P1; // which player am I locally (set in AssingMySign)
+    private Player _myPlayer = Player.P1; // which player am I locally (set in AssignMySign)
 
     private enum Phase { Move, Break }
     private Phase phase = Phase.Move;   // first phase is move
@@ -85,6 +85,10 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
 
     void Start()
     {
+        InitStart();
+    }
+    private void InitStart()
+    {
         if (_gameOverPopup != null)
             _gameOverPopup.SetActive(false); // hide popup at start
 
@@ -95,7 +99,7 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
 
         PlacePlayersStart();
         Redraw();
-        ShowTurnText("BLUE TURN");
+        ShowTurnText(_current == Player.P1 ? "<color=blue>BLUE TURN</color>" : "<color=red>RED TURN</color>");
     }
 
     // ---------------- BUILD ----------------
@@ -132,16 +136,76 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     {
         Debug.Log("GameLogic: Restarting game");
 
+        // InitStart();
+        OnLocalRestartMatch();
+    }
+
+
+
+
+
+
+    private void OnLocalRestartMatch()
+    {
+        Debug.Log("Local requested restart -> broadcasting RPC to all");
+        photonView.RPC(nameof(RPC_RestartMatch), RpcTarget.All);
+    }
+
+    [PunRPC]
+    private void RPC_RestartMatch()
+    {
+        Debug.Log("[RPC] Restart match received");
+        ResetMatchLocal();
+    }
+
+    // Reset local state to initial (called via RPC on all clients)
+    private void ResetMatchLocal()
+    {
+        _isGameOver = false;
+        _board = new GameBoard(width, height);
+        _check = new BoardStateCheck();
+        _current = Player.P1;
+        phase = Phase.Move;
+        _isFirstTurn = true;
+
+        // hide popup
         if (_gameOverPopup != null)
             _gameOverPopup.SetActive(false);
 
+        // reset visuals
+        for (int y = 0; y < _board.height; y++)
+            for (int x = 0; x < _board.width; x++)
+                tiles[x, y].SetSprite(null);
+
+        Redraw();
+
+
+        BuildBoard();
+
         _board = new GameBoard(width, height);
         _check = new BoardStateCheck();
-        ShowTurnText("BLUE TURN");
 
         PlacePlayersStart();
         Redraw();
+        ShowTurnText(_current == Player.P1 ? "<color=blue>BLUE TURN</color>" : "<color=red>RED TURN</color>");
+
+
+        // master starts the turn sequence
+        if (PhotonNetwork.IsMasterClient && turnMgr != null)
+        {
+            Debug.Log("[Restart] Master begins first turn");
+            turnMgr.BeginTurn();
+        }
     }
+
+
+
+
+
+
+
+
+
 
     // ---------------- PLAYER INPUT ----------------
     private void OnClickSlot(int slotIndex)
@@ -247,7 +311,7 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
             _current = currentIsP1 ? Player.P2 : Player.P1;
             phase = Phase.Move;
 
-            ShowTurnText(_current == Player.P1 ? "BLUE TURN" : "RED TURN");
+            ShowTurnText(_current == Player.P1 ? "<color=blue>BLUE TURN</color>" : "<color=red>RED TURN</color>");
 
             if (!_check.CurrentHasMove(_board, _current == Player.P1))
             {
@@ -345,7 +409,7 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
         return list[idx];
     }
 
-    private void AssingMySign()
+    private void AssignMySign()
     {
         var room = PhotonNetwork.CurrentRoom;
         if (room == null) return;
@@ -356,7 +420,7 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
         int myIndex = list.IndexOf(PhotonNetwork.LocalPlayer.ActorNumber);
         _myPlayer = (myIndex == 0) ? Player.P1 : Player.P2;
 
-        string spriteKey = (_myPlayer == Player.P1) ? "BluePlayer" : "RedPlayer";
+        string spriteKey = (_myPlayer == Player.P1) ? "you are BluePlayer" : "you are RedPlayer";
         _mySignTurnText.text = spriteKey;
         Debug.Log($"[Photon] Assigned sign {spriteKey} (playerIndex={myIndex})");
     }
@@ -367,7 +431,7 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
         {
             _isFirstTurn = false;
             _isGameOver = false;
-            AssingMySign();
+            AssignMySign();
 
             // UI change example (keep/modify to your prefab names)
             if (unityObjects.ContainsKey("Screen_SinglePlayer"))
