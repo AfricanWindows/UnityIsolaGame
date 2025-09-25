@@ -1,10 +1,8 @@
-using System.Collections;
+using System.Collections.Generic;
 using Photon.Pun;
 using Photon.Pun.UtilityScripts;
 using TMPro;
-using Unity.VisualScripting;
 using UnityEngine;
-using UnityEngine.UI;
 using SlotState = GameBoard.SlotState;  // shorter name
 
 public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
@@ -14,10 +12,10 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     private float _startTime;
     private int _offsetIndex = 0;    // P1 start the game
     private bool _isMyTurn = false;
-    private bool _isFirstTurn = false;
+    private bool _isFirstTurn = true;
     private bool _isGameOver;
 
-
+    private Dictionary<string, GameObject> unityObjects;
 
     [Header("Prefabs & Scene")]
     public Slot tilePrefab;       // prefab for each board cell
@@ -38,7 +36,9 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     private BoardStateCheck _check; // helper for rules
 
     private enum Player { P1, P2 }
-    private Player _current = Player.P1; // blue starts
+    private Player _current = Player.P1; // which logical player is moving now
+
+    private Player _myPlayer = Player.P1; // which player am I locally (set in AssingMySign)
 
     private enum Phase { Move, Break }
     private Phase phase = Phase.Move;   // first phase is move
@@ -51,62 +51,51 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     [SerializeField] private TextMeshProUGUI _whosTurnText;
     [SerializeField] private TextMeshProUGUI _mySignTurnText;
 
-    private float _aiDelayMove = 0.5f;
-    private float _aiDelayBreak = 0.2f;
-
     [Header("Sounds")]
     public AudioSource gameoverSound;
     public AudioSource stepSound;
     public AudioSource breakingSound;
-
-    private bool _aiBusy = false;
 
     // ---------------- UNITY EVENTS ----------------
     public override void OnEnable()
     {
         Slot.OnClickSlot += OnClickSlot;
         Btn_Restart.OnClickRestart += OnClickRestart;
-        PhotonMenuLogic.OnStartGame += OnStartGame;
+        MenuLogic.OnStartGame += OnStartGame;
     }
     public override void OnDisable()
     {
         Slot.OnClickSlot -= OnClickSlot;
         Btn_Restart.OnClickRestart -= OnClickRestart;
-        PhotonMenuLogic.OnStartGame -= OnStartGame;
-
+        MenuLogic.OnStartGame -= OnStartGame;
     }
 
     void Awake()
     {
-        turnMgr.TurnManagerListener = this;
+        if (turnMgr != null)
+            turnMgr.TurnManagerListener = this;
 
+        unityObjects = new Dictionary<string, GameObject>();
+        GameObject[] unityObj = GameObject.FindGameObjectsWithTag("UnityObject");
+        foreach (GameObject obj in unityObj)
+        {
+            unityObjects.Add(obj.name, obj);
+        }
     }
 
     void Start()
     {
         if (_gameOverPopup != null)
             _gameOverPopup.SetActive(false); // hide popup at start
-        // build visual grid
+
         BuildBoard();
 
-        // create data board
         _board = new GameBoard(width, height);
         _check = new BoardStateCheck();
 
-        // put players at start positions
         PlacePlayersStart();
-
-        // draw everything
         Redraw();
-
         ShowTurnText("BLUE TURN");
-
-
-        // check if already stuck
-        // if (CheckImmediateGameOver()) return;
-
-        // if it's red's turn, start AI
-        // TryStartRedAI();
     }
 
     // ---------------- BUILD ----------------
@@ -115,7 +104,6 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
         tiles = new Slot[width, height];
         int idx = 0;
 
-        // spawn tiles in grid
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++, idx++)
             {
@@ -127,127 +115,147 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
                 tiles[x, y] = t;
             }
 
-        // center camera
         if (mainCamera != null)
             mainCamera.transform.position = new Vector3((width - 1) / 2f, (height - 1) / 2f, -10f);
     }
 
     private void PlacePlayersStart()
     {
-        _board.ResetStart();   // reset board with 2 players
-        _current = Player.P1;   // blue starts
+        _board.ResetStart();
+        _current = Player.P1;
         phase = Phase.Move;
         _gameOver = false;
     }
 
-
-
-    // ---------------- RESTART THE GAME  WITH BUTTON ----------------
-
+    // ---------------- RESTART ----------------
     private void OnClickRestart()
     {
         Debug.Log("GameLogic: Restarting game");
 
-        // hide gameover UI
         if (_gameOverPopup != null)
             _gameOverPopup.SetActive(false);
 
-        // reset data
         _board = new GameBoard(width, height);
         _check = new BoardStateCheck();
         ShowTurnText("BLUE TURN");
 
-
-        // reset players + flags
         PlacePlayersStart();
-
-        // redraw the tiles
         Redraw();
-
-        // check gameover at start
-        // if (CheckImmediateGameOver()) return;
-
-        // if red’s turn -> AI
-        // TryStartRedAI();
     }
-
 
     // ---------------- PLAYER INPUT ----------------
     private void OnClickSlot(int slotIndex)
     {
-        if (_gameOver) return;             // stop if finished
-        if (_current == Player.P2) return; // only blue clicks
-        if (_aiBusy) return;               // ignore while AI is thinking
-        if (!_check.IndexInBounds(_board, slotIndex)) return;
+        // One big guard: only allow input if game running, my turn, and it's my player turn logically,
+        // and index is in bounds.
+        if (_gameOver || !_isMyTurn || _current != _myPlayer || !_check.IndexInBounds(_board, slotIndex))
+            return;
 
+        // Move phase: do local placement and send intermediate move (finished=false)
         if (phase == Phase.Move)
         {
-            // MOVE phase
-            if (_check.IsLegalMoveForCurrent(_board, true, slotIndex))
+            if (_check.IsLegalMoveForCurrent(_board, _current == Player.P1, slotIndex))
             {
-                Vector2Int dst = _check.FromIndex(_board, slotIndex);
-                Vector2Int cur = _board.GetP1Pos();
+                Placement(slotIndex);            // apply locally (instant feedback)
+                SendMove(slotIndex, false);      // send intermediate move to other clients
+                // do NOT set _isMyTurn=false yet: still need to Break
+            }
+        }
+        else // Break phase: apply local break and send final move (finished=true)
+        {
+            if (_check.IsLegalBreakAtIndex(_board, slotIndex))
+            {
+                Placement(slotIndex);            // apply break locally
+                SendMove(slotIndex, true);       // send final move to others
+                _isMyTurn = false;               // my turn finished after break
+                // master will call turnMgr.BeginTurn() in OnPlayerFinished to start next turn
+            }
+        }
+    }
 
-                // update board
+    private void SendMove(int slotIndex, bool finished)
+    {
+        if (turnMgr == null)
+        {
+            Debug.LogError("SendMove called but no PunTurnManager assigned");
+            return;
+        }
+
+        if (turnMgr.IsFinishedByMe && finished)
+        {
+            Debug.Log("Already finished this turn — not sending final move");
+            return;
+        }
+
+        turnMgr.SendMove(slotIndex, finished);
+        Debug.Log($"[Photon] Sent move: {slotIndex} (finished={finished})");
+    }
+
+    // Placement now handles both players depending on _current
+    private void Placement(int index)
+    {
+        bool currentIsP1 = (_current == Player.P1);
+
+        if (phase == Phase.Move && _check.IsLegalMoveForCurrent(_board, currentIsP1, index))
+        {
+            Vector2Int dst = _check.FromIndex(_board, index);
+
+            if (currentIsP1)
+            {
+                Vector2Int cur = _board.GetP1Pos();
                 _board.Set(cur.x, cur.y, SlotState.Empty);
                 _board.Set(dst.x, dst.y, SlotState.P1);
                 _board.SetP1Pos(dst);
-
-                Redraw();
-
-                // play step sound
-                if (stepSound != null)
-                    stepSound.Play();
-
-                // check if red has no moves left
-                if (!_check.OpponentHasMove(_board, true))
-                {
-                    EndGame(Player.P1, "Red stuck");
-                    return;
-                }
-
-                // now go to break phase
-                phase = Phase.Break;
             }
-        }
-        else
-        {
-            // BREAK phase
-            if (_check.IsLegalBreakAtIndex(_board, slotIndex))
+            else
             {
-                Vector2Int pos = _check.FromIndex(_board, slotIndex);
-                _board.Set(pos.x, pos.y, SlotState.Broken);
-
-                if (breakingSound != null)
-                    breakingSound.Play();
-
-                Redraw();
-
-                // check if blue just trapped itself
-                if (!_board.AreAdjacent(_board.GetP1Pos(), _board.GetP2Pos()) &&
-                    !_check.CurrentHasMove(_board, true))
-                {
-                    EndGame(Player.P2, "Blue trapped itself");
-                    return;
-                }
-
-                // switch turn to red
-                _current = Player.P2;
-                phase = Phase.Move;
-
-                ShowTurnText("RED TURN");
-
-
-                // check if red has any moves
-                if (!_check.CurrentHasMove(_board, false))
-                {
-                    EndGame(Player.P1, "Red stuck");
-                    return;
-                }
-
-                // start AI
-                TryStartRedAI();
+                Vector2Int cur = _board.GetP2Pos();
+                _board.Set(cur.x, cur.y, SlotState.Empty);
+                _board.Set(dst.x, dst.y, SlotState.P2);
+                _board.SetP2Pos(dst);
             }
+
+            Redraw();
+            stepSound?.Play();
+
+            // opponent no moves -> current wins
+            if (!_check.OpponentHasMove(_board, currentIsP1))
+            {
+                EndGame(currentIsP1 ? Player.P1 : Player.P2, "Opponent stuck");
+                return;
+            }
+
+            phase = Phase.Break;
+        }
+        else if (phase != Phase.Move && _check.IsLegalBreakAtIndex(_board, index))
+        {
+            Vector2Int pos = _check.FromIndex(_board, index);
+            _board.Set(pos.x, pos.y, SlotState.Broken);
+
+            breakingSound?.Play();
+            Redraw();
+
+            // check if the current player trapped themself
+            if (!_board.AreAdjacent(_board.GetP1Pos(), _board.GetP2Pos()) &&
+                !_check.CurrentHasMove(_board, currentIsP1))
+            {
+                EndGame(currentIsP1 ? Player.P2 : Player.P1, "Player trapped themself");
+                return;
+            }
+
+            // switch logical current player (for the clients that already applied the final move)
+            _current = currentIsP1 ? Player.P2 : Player.P1;
+            phase = Phase.Move;
+
+            ShowTurnText(_current == Player.P1 ? "BLUE TURN" : "RED TURN");
+
+            if (!_check.CurrentHasMove(_board, _current == Player.P1))
+            {
+                EndGame(currentIsP1 ? Player.P2 : Player.P1, "Opponent stuck");
+                return;
+            }
+
+            // In multiplayer there is no local AI; other player's client will act when their OnTurnBegins sets _isMyTurn
         }
     }
 
@@ -257,91 +265,9 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
             _whosTurnText.text = tx;
     }
 
-
-    // ---------------- AI LOGIC ----------------
-    private void TryStartRedAI()
-    {
-        if (!_gameOver && _current == Player.P2 && !_aiBusy)
-            StartCoroutine(RedTurn());
-    }
-
-    private IEnumerator RedTurn()
-    {
-        _aiBusy = true;
-
-        // wait a bit before making the AI move
-        yield return new WaitForSeconds(_aiDelayMove);
-
-        // if red cannot move, blue wins
-        if (!_check.CurrentHasMove(_board, false))
-        {
-            EndGame(Player.P1, "Red stuck");
-            _aiBusy = false;
-            yield break;
-        }
-
-        // MOVE
-        var moves = _board.GetLegalMovesFrom(_board.GetP2Pos());
-        Vector2Int move = moves[Random.Range(0, moves.Count)];
-        Vector2Int old = _board.GetP2Pos();
-
-        _board.Set(old.x, old.y, SlotState.Empty);
-        _board.Set(move.x, move.y, SlotState.P2);
-        _board.SetP2Pos(move);
-
-        Redraw();
-
-        if (stepSound != null)
-            stepSound.Play();
-
-        // optional: short delay after move too
-        yield return new WaitForSeconds(_aiDelayMove);
-
-        // BREAK (pick random empty cell)
-        var empties = _board.GetAllEmpty();
-        if (empties.Count > 0)
-        {
-            Vector2Int b = empties[Random.Range(0, empties.Count)];
-            _board.Set(b.x, b.y, SlotState.Broken);
-
-            if (breakingSound != null)
-                breakingSound.Play();
-        }
-
-        Redraw();
-        yield return new WaitForSeconds(_aiDelayBreak);
-
-        // check if red trapped itself
-        if (!_board.AreAdjacent(_board.GetP1Pos(), _board.GetP2Pos()) &&
-            !_check.CurrentHasMove(_board, false))
-        {
-            EndGame(Player.P1, "Red trapped itself");
-            _aiBusy = false;
-            yield break;
-        }
-
-        // switch back to blue
-        _current = Player.P1;
-        phase = Phase.Move;
-
-        ShowTurnText("BLUE TURN");
-
-        // if blue is stuck now, red wins
-        if (!_check.CurrentHasMove(_board, true))
-        {
-            EndGame(Player.P2, "Blue stuck");
-            _aiBusy = false;
-            yield break;
-        }
-
-        _aiBusy = false;
-    }
-
-
     // ---------------- RENDER ----------------
     private void Redraw()
     {
-        // draw all board cells
         for (int y = 0; y < _board.height; y++)
         {
             for (int x = 0; x < _board.width; x++)
@@ -378,8 +304,7 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     {
         _gameOver = true;
         Debug.Log($"Game Over! {reason}. Winner: {NameOf(winner)}");
-        if (gameoverSound != null)
-            gameoverSound.Play();
+        gameoverSound?.Play();
 
         if (_gameOverPopup != null)
             _gameOverPopup.SetActive(true);
@@ -403,14 +328,12 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     private Player Other(Player p) => (p == Player.P1) ? Player.P2 : Player.P1;
     private string NameOf(Player p) => (p == Player.P1) ? "BLUE" : "RED";
 
-
-
-    private int GetExpectedActorForTurn(int turn)   // tell us whos turn now
+    private int GetExpectedActorForTurn(int turn)   // tell us who's actor number for this turn
     {
         var room = PhotonNetwork.CurrentRoom;
         if (room == null) return -1;
 
-        var list = new System.Collections.Generic.List<int>();
+        var list = new List<int>();
         foreach (var kvp in room.Players)
             list.Add(kvp.Key);
 
@@ -422,24 +345,20 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
         return list[idx];
     }
 
-
-
     private void AssingMySign()
     {
         var room = PhotonNetwork.CurrentRoom;
         if (room == null) return;
 
-        var list = new System.Collections.Generic.List<int>(room.Players.Keys);
-
+        var list = new List<int>(room.Players.Keys);
         list.Sort();
 
         int myIndex = list.IndexOf(PhotonNetwork.LocalPlayer.ActorNumber);
-        string spriteKey = (myIndex == 0) ? "BluePlayer" : "RedPlayer";
+        _myPlayer = (myIndex == 0) ? Player.P1 : Player.P2;
 
+        string spriteKey = (_myPlayer == Player.P1) ? "BluePlayer" : "RedPlayer";
         _mySignTurnText.text = spriteKey;
         Debug.Log($"[Photon] Assigned sign {spriteKey} (playerIndex={myIndex})");
-
-
     }
 
     private void FirstTurnLogic()
@@ -450,23 +369,20 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
             _isGameOver = false;
             AssingMySign();
 
+            // UI change example (keep/modify to your prefab names)
+            if (unityObjects.ContainsKey("Screen_SinglePlayer"))
+                unityObjects["Screen_SinglePlayer"].SetActive(true);
+            if (unityObjects.ContainsKey("MenuScreen"))
+                unityObjects["MenuScreen"].SetActive(false);
         }
-
-
-
     }
-
-
-
 
     #region Server Events
 
     private void OnStartGame()
     {
         Debug.Log("OnStartGame");
-        // turnMgr.TurnManagerListener = this;
-        turnMgr.BeginTurn();
-
+        turnMgr?.BeginTurn();
     }
 
     public void OnTurnBegins(int turn)
@@ -474,38 +390,68 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
         _isTimeOut = false;
         _startTime = Time.time;
 
-        int expecteActor = GetExpectedActorForTurn(turn);  // get 1 or 2
-        if (expecteActor < 0)
+        int expectedActor = GetExpectedActorForTurn(turn);
+        if (expectedActor < 0)
         {
-            Debug.LogError("[Photon] OnTurnBegins: turnOrder not set yet"); // if has no one in turn order
+            Debug.LogError("[Photon] OnTurnBegins: turnOrder not set yet");
         }
 
-        _isMyTurn = PhotonNetwork.LocalPlayer.ActorNumber == expecteActor;
+        // set logical current player according to turn order
+        var room = PhotonNetwork.CurrentRoom;
+        if (room != null)
+        {
+            var list = new List<int>();
+            foreach (var kvp in room.Players) list.Add(kvp.Key);
+            list.Sort();
+
+            // the actor for this turn already computed
+            int actor = expectedActor;
+            int indexInOrder = list.IndexOf(actor);
+            _current = (indexInOrder == 0) ? Player.P1 : Player.P2;
+        }
+
+        _isMyTurn = PhotonNetwork.LocalPlayer.ActorNumber == expectedActor;
 
         FirstTurnLogic();
-
-
-        Debug.Log("Is My Turn: " + _isMyTurn);
-
+        Debug.Log("OnTurnBegins - Is My Turn: " + _isMyTurn + ", Current: " + _current);
     }
 
-    public void OnTurnCompleted(int turn)
-    {
-    }
+    public void OnTurnCompleted(int turn) { }
 
     public void OnPlayerMove(Photon.Realtime.Player player, int turn, object move)
     {
+        // apply intermediate move from other players (skip local)
+        if (player.ActorNumber == PhotonNetwork.LocalPlayer.ActorNumber) return;
+
+        if (move is int index)
+        {
+            Debug.Log($"[Photon] OnPlayerMove from {player.ActorNumber}: {index}");
+            // Ensure _current is set correctly for remote: OnTurnBegins should already have set it.
+            Placement(index);
+        }
     }
 
     public void OnPlayerFinished(Photon.Realtime.Player player, int turn, object move)
     {
+        Debug.Log($"[Photon] OnPlayerFinished {player.ActorNumber} turn {turn} move={move}");
+
+        // apply remote player's final move (break)
+        if (player.ActorNumber != PhotonNetwork.LocalPlayer.ActorNumber && move != null)
+        {
+            if (move is int index)
+            {
+                Placement(index);
+            }
+        }
+
+        // The master client advances the turn
+        if (PhotonNetwork.IsMasterClient && turnMgr != null)
+        {
+            turnMgr.BeginTurn();
+        }
     }
 
-    public void OnTurnTimeEnds(int turn)
-    {
-    }
+    public void OnTurnTimeEnds(int turn) { }
 
     #endregion
-
-
 }
