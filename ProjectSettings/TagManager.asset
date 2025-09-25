@@ -6,6 +6,7 @@ TagManager:
   tags:
   - popup
   - UnityObject
+  - phObjects
   layers:
   - Default
   - TransparentFX

@@ -7,6 +7,7 @@ using UnityEngine.UI;
 
 public class MenuLogic : MonoBehaviour
 {
+
     private enum Screens
     {
         MainMenu, SinglePlayer, Options, MultiPlayerMenu, StudentInfo, MultiPlayer
@@ -17,6 +18,25 @@ public class MenuLogic : MonoBehaviour
     private Screens _currentScreen;
     private Stack<Screens> _history = new Stack<Screens>(); // Stack instead of _prevScreen
     private Dictionary<string, GameObject> _unityObjects;
+
+    void OnEnable()
+    {
+        PhotonMenuLogic.OnStartGame += OnStartGame;
+    }
+    void OnDisable()
+    {
+        PhotonMenuLogic.OnStartGame -= OnStartGame;
+    }
+
+    private void OnStartGame()
+    {
+        foreach (GameObject s in _unityObjects.Values)
+        {
+            s.SetActive(false);
+        }
+        img_bg.SetActive(false);
+        _unityObjects["Screen_MultiPlayer"].SetActive(true);
+    }
 
     void Awake()
     {
@@ -96,12 +116,12 @@ public class MenuLogic : MonoBehaviour
         Debug.Log("Btn_StudentInfo");
         ChangeScreen(Screens.StudentInfo);
     }
-    public void Btn_PlayingMulti()
-    {
-        Debug.Log("Btn_MultiPlayer");
-        img_bg.SetActive(false);
-        ChangeScreen(Screens.MultiPlayer);
-    }
+    // public void Btn_PlayingMulti()
+    // {
+    //     Debug.Log("Btn_MultiPlayer");
+    //     img_bg.SetActive(false);
+    //     ChangeScreen(Screens.MultiPlayer);
+    // }
 
     public void Btn_Options()
     {

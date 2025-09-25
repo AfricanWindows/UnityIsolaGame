@@ -1,11 +1,15 @@
 using System.Collections;
+using Photon.Pun;
+using Photon.Pun.UtilityScripts;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 using SlotState = GameBoard.SlotState;  // shorter name
 
-public class GameLogic : MonoBehaviour
+public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
 {
+    public PunTurnManager turnMgr;
+
     [Header("Prefabs & Scene")]
     public Slot tilePrefab;       // prefab for each board cell
     public Transform boardParent; // parent object for tiles
@@ -48,17 +52,22 @@ public class GameLogic : MonoBehaviour
     private bool _aiBusy = false;
 
     // ---------------- UNITY EVENTS ----------------
-    void OnEnable()
+    public override void OnEnable()
     {
         Slot.OnClickSlot += OnClickSlot;
         Btn_Restart.OnClickRestart += OnClickRestart;
     }
-    void OnDisable()
+    public override void OnDisable()
     {
         Slot.OnClickSlot -= OnClickSlot;
         Btn_Restart.OnClickRestart -= OnClickRestart;
+
     }
 
+    private void OnStartGame()
+    {
+        
+    }
 
     void Start()
     {
@@ -380,4 +389,27 @@ public class GameLogic : MonoBehaviour
     // ---------------- SMALL HELPERS ----------------
     private Player Other(Player p) => (p == Player.P1) ? Player.P2 : Player.P1;
     private string NameOf(Player p) => (p == Player.P1) ? "BLUE" : "RED";
+
+
+
+
+    public void OnTurnBegins(int turn)
+    {
+    }
+
+    public void OnTurnCompleted(int turn)
+    {
+    }
+
+    public void OnPlayerMove(Photon.Realtime.Player player, int turn, object move)
+    {
+    }
+
+    public void OnPlayerFinished(Photon.Realtime.Player player, int turn, object move)
+    {
+    }
+
+    public void OnTurnTimeEnds(int turn)
+    {
+    }
 }
