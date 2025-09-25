@@ -11,8 +11,6 @@ public class Btn_Restart : MonoBehaviour
     public void OnMouseDown()
     {
         OnClickRestart?.Invoke();
-        // if (OnClickRestart != null)
-        //     OnClickRestart();
     }
 
 }

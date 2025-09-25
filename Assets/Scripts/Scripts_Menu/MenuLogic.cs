@@ -9,7 +9,7 @@ public class MenuLogic : MonoBehaviour
 {
     private enum Screens
     {
-        MainMenu, SinglePlayer, Options, MultiPlayer, StudentInfo, PlayingMulti, SinglePlayerGame
+        MainMenu, SinglePlayer, Options, MultiPlayerMenu, StudentInfo, MultiPlayer
     };
 
     [SerializeField] private GameObject img_bg;
@@ -84,13 +84,12 @@ public class MenuLogic : MonoBehaviour
         Debug.Log("Btn_SinglePlayer");
         img_bg.SetActive(false);
         ChangeScreen(Screens.SinglePlayer);
-        ChangeScreen(Screens.SinglePlayerGame);
     }
 
     public void Btn_MultiPlayer()
     {
-        Debug.Log("Btn_MultiPlayer");
-        ChangeScreen(Screens.MultiPlayer);
+        Debug.Log("Btn_MultiPlayerMenu");
+        ChangeScreen(Screens.MultiPlayerMenu);
     }
     public void Btn_StudentInfo()
     {
@@ -99,8 +98,9 @@ public class MenuLogic : MonoBehaviour
     }
     public void Btn_PlayingMulti()
     {
-        Debug.Log("Btn_StudentInfo");
-        ChangeScreen(Screens.PlayingMulti);
+        Debug.Log("Btn_MultiPlayer");
+        img_bg.SetActive(false);
+        ChangeScreen(Screens.MultiPlayer);
     }
 
     public void Btn_Options()
