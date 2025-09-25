@@ -10,6 +10,14 @@ using SlotState = GameBoard.SlotState;  // shorter name
 public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
 {
     public PunTurnManager turnMgr;
+    private bool _isTimeOut = false;
+    private float _startTime;
+    private int _offsetIndex = 0;    // P1 start the game
+    private bool _isMyTurn = false;
+    private bool _isFirstTurn = false;
+    private bool _isGameOver;
+
+
 
     [Header("Prefabs & Scene")]
     public Slot tilePrefab;       // prefab for each board cell
@@ -40,7 +48,8 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     [Header("UI GameOver Popup")]
     [SerializeField] private GameObject _gameOverPopup; // drag PopupGameOver here
     [SerializeField] private TextMeshProUGUI _gameOverText;  // text to show winner
-    [SerializeField] private TextMeshProUGUI _whosTurnText;  // text to show winner
+    [SerializeField] private TextMeshProUGUI _whosTurnText;
+    [SerializeField] private TextMeshProUGUI _mySignTurnText;
 
     private float _aiDelayMove = 0.5f;
     private float _aiDelayBreak = 0.2f;
@@ -67,9 +76,10 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
 
     }
 
-    private void OnStartGame()
+    void Awake()
     {
-        Debug.Log("OnStartGame");
+        turnMgr.TurnManagerListener = this;
+
     }
 
     void Start()
@@ -395,10 +405,88 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
 
 
 
+    private int GetExpectedActorForTurn(int turn)   // tell us whos turn now
+    {
+        var room = PhotonNetwork.CurrentRoom;
+        if (room == null) return -1;
+
+        var list = new System.Collections.Generic.List<int>();
+        foreach (var kvp in room.Players)
+            list.Add(kvp.Key);
+
+        list.Sort();
+
+        if (list.Count == 0) return -1;
+
+        int idx = (turn - 1 + _offsetIndex) % list.Count;
+        return list[idx];
+    }
+
+
+
+    private void AssingMySign()
+    {
+        var room = PhotonNetwork.CurrentRoom;
+        if (room == null) return;
+
+        var list = new System.Collections.Generic.List<int>(room.Players.Keys);
+
+        list.Sort();
+
+        int myIndex = list.IndexOf(PhotonNetwork.LocalPlayer.ActorNumber);
+        string spriteKey = (myIndex == 0) ? "BluePlayer" : "RedPlayer";
+
+        _mySignTurnText.text = spriteKey;
+        Debug.Log($"[Photon] Assigned sign {spriteKey} (playerIndex={myIndex})");
+
+
+    }
+
+    private void FirstTurnLogic()
+    {
+        if (_isFirstTurn)
+        {
+            _isFirstTurn = false;
+            _isGameOver = false;
+            AssingMySign();
+
+        }
+
+
+
+    }
+
+
+
+
     #region Server Events
+
+    private void OnStartGame()
+    {
+        Debug.Log("OnStartGame");
+        // turnMgr.TurnManagerListener = this;
+        turnMgr.BeginTurn();
+
+    }
 
     public void OnTurnBegins(int turn)
     {
+        _isTimeOut = false;
+        _startTime = Time.time;
+
+        int expecteActor = GetExpectedActorForTurn(turn);  // get 1 or 2
+        if (expecteActor < 0)
+        {
+            Debug.LogError("[Photon] OnTurnBegins: turnOrder not set yet"); // if has no one in turn order
+        }
+
+        _isMyTurn = PhotonNetwork.LocalPlayer.ActorNumber == expecteActor;
+
+        FirstTurnLogic();
+
+
+        Debug.Log("Is My Turn: " + _isMyTurn);
+
     }
 
     public void OnTurnCompleted(int turn)
@@ -418,4 +506,6 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     }
 
     #endregion
+
+
 }

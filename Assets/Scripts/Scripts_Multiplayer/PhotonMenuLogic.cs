@@ -70,6 +70,7 @@ public class PhotonMenuLogic : MonoBehaviourPunCallbacks
 
     private void StartGame()
     {
+        UpdateStatus("Starting Game...");   // every one get Starting Gmae...
         var room = PhotonNetwork.CurrentRoom;
         if (room == null || !PhotonNetwork.IsMasterClient) return;
 
@@ -84,7 +85,6 @@ public class PhotonMenuLogic : MonoBehaviourPunCallbacks
 
         OnStartGame?.Invoke();
 
-        UpdateStatus("Starting Game...");   // only master see Starting Game...
     }
 
 
