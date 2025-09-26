@@ -8,8 +8,8 @@ using SlotState = GameBoard.SlotState;  // shorter name
 public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
 {
     public PunTurnManager turnMgr;
-    private bool _isTimeOut = false;
-    private float _startTime;
+    // private bool _isTimeOut = false;
+    // private float _startTime;
     private int _offsetIndex = 0;    // used to align turn -> actor mapping
     private bool _isMyTurn = false;
     private bool _isFirstTurn = true;
@@ -478,8 +478,8 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
             AssignMySign();
 
             // UI change example (keep/modify to your prefab names)
-            if (unityObjects.ContainsKey("Screen_SinglePlayer"))
-                unityObjects["Screen_SinglePlayer"].SetActive(true);
+            if (unityObjects.ContainsKey("Screen_MultiPlayerGame"))
+                unityObjects["Screen_MultiPlayerGame"].SetActive(true);
             if (unityObjects.ContainsKey("MenuScreen"))
                 unityObjects["MenuScreen"].SetActive(false);
         }
@@ -495,8 +495,8 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
 
     public void OnTurnBegins(int turn)
     {
-        _isTimeOut = false;
-        _startTime = Time.time;
+        // _isTimeOut = false;
+        // _startTime = Time.time;
 
         // If we forced master-first on restart, compute offset so that this `turn` maps to master (list[0])
         if (_forceMasterFirst)

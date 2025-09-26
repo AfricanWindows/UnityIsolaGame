@@ -23,7 +23,7 @@ public class MenuLogic : MonoBehaviourPunCallbacks
 
     private enum Screens
     {
-        MainMenu, SinglePlayer, Options, MultiPlayerMenu, StudentInfo, MultiPlayer
+        MainMenu, SinglePlayer, Options, MultiPlayerMenu, StudentInfo, MultiPlayerGame
     };
 
     [SerializeField] private GameObject img_bg;
@@ -223,6 +223,10 @@ public class MenuLogic : MonoBehaviourPunCallbacks
 
         var prev = _history.Pop();                  // remove the last element
         ChangeScreen(prev, pushHistory: false);     // change screen back without saving prev screen
+        if (_currentScreen == Screens.MainMenu)
+        {
+            if (img_bg != null) img_bg.SetActive(true);
+        }
     }
 
     public void Btn_SinglePlayer()
@@ -232,7 +236,7 @@ public class MenuLogic : MonoBehaviourPunCallbacks
         ChangeScreen(Screens.SinglePlayer);
     }
 
-    public void Btn_MultiPlayer()
+    public void Btn_MultiPlayerMenu()
     {
         Debug.Log("Btn_MultiPlayerMenu");
         ChangeScreen(Screens.MultiPlayerMenu);

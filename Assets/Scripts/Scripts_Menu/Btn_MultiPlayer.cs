@@ -8,6 +8,6 @@ public class Btn_MultiPlayer : MonoBehaviour
     public void Click()
     {
         if (menuLogic != null)
-            menuLogic.Btn_MultiPlayer();   // use function from menuLogic
+            menuLogic.Btn_MultiPlayerMenu();   // use function from menuLogic
     }
 }
