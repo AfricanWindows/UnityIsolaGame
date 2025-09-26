@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+// Data model for the board: stores cells and player positions
 public class GameBoard
 {
     public enum SlotState
@@ -12,17 +13,18 @@ public class GameBoard
     public readonly int height;
 
     private SlotState[,] cells;
-    private Vector2Int p1Pos;   // blue
-    private Vector2Int p2Pos;   // red
+    private Vector2Int p1Pos;   // blue player pos
+    private Vector2Int p2Pos;   // red player pos
 
     public GameBoard(int w, int h)
     {
+        // ensure at least 3x3
         width = Mathf.Max(3, w);
         height = Mathf.Max(3, h);
         cells = new SlotState[width, height];
     }
 
-    // Clear and place players at start
+    // Clear board and put players at start positions
     public void ResetStart()
     {
         for (int y = 0; y < height; y++)
@@ -58,6 +60,7 @@ public class GameBoard
     public void SetP2Pos(Vector2Int p) => p2Pos = p;
 
     // --- rules helpers ---
+    // Check adjacency (including diagonals)
     public bool AreAdjacent(Vector2Int a, Vector2Int b)
     {
         int dx = Mathf.Abs(a.x - b.x);
@@ -65,6 +68,7 @@ public class GameBoard
         return (dx <= 1 && dy <= 1);
     }
 
+    // Return true if any adjacent cell from pos is empty
     public bool HasAnyMoveFrom(Vector2Int pos)
     {
         for (int dx = -1; dx <= 1; dx++)
@@ -77,6 +81,7 @@ public class GameBoard
         return false;
     }
 
+    // Return list of all legal move positions from pos
     public List<Vector2Int> GetLegalMovesFrom(Vector2Int pos)
     {
         var list = new List<Vector2Int>();
@@ -90,6 +95,7 @@ public class GameBoard
         return list;
     }
 
+    // Return all empty cells on board
     public List<Vector2Int> GetAllEmpty()
     {
         var list = new List<Vector2Int>();

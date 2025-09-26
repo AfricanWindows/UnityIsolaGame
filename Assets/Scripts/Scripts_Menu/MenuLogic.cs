@@ -9,14 +9,15 @@ using Photon.Realtime;
 using TMPro;
 using Hashtable = ExitGames.Client.Photon.Hashtable;
 
+// Controls main menu, connects to Photon, creates/joins rooms and switches screens
 public class MenuLogic : MonoBehaviourPunCallbacks
 {
-    public static Action OnStartGame;
+    public static Action OnStartGame; // event to tell GameLogic to start
 
     private Dictionary<string, GameObject> phObjects;
-    private int _searchValue = 0;
-    private int _maxPlayers = 2;
-    private string _roomPassword = "alan";
+    private int _searchValue = 0;       // room search value (sv)
+    private int _maxPlayers = 2;        // players per room
+    private string _roomPassword = "alan"; // simple room password (manual check)
 
     [SerializeField] private Slider _slider;
     [SerializeField] private TextMeshProUGUI _sliderLabel;
@@ -29,7 +30,7 @@ public class MenuLogic : MonoBehaviourPunCallbacks
     [SerializeField] private GameObject img_bg;
 
     private Screens _currentScreen;
-    private Stack<Screens> _history = new Stack<Screens>(); // Stack instead of _prevScreen
+    private Stack<Screens> _history = new Stack<Screens>(); // history stack for Back button
     private Dictionary<string, GameObject> _unityObjects;
 
     void Awake()
@@ -38,6 +39,7 @@ public class MenuLogic : MonoBehaviourPunCallbacks
 
         if (_slider != null)
         {
+            // setup slider event
             _slider.onValueChanged.RemoveAllListeners();
             _slider.onValueChanged.AddListener(OnSliderChanged);
             _slider.value = _searchValue;
@@ -52,6 +54,7 @@ public class MenuLogic : MonoBehaviourPunCallbacks
 
     private void OnSliderChanged(float v)
     {
+        // save slider value and update label
         _searchValue = Mathf.RoundToInt(v);
         UpdateSliderLabel();
     }
@@ -59,17 +62,19 @@ public class MenuLogic : MonoBehaviourPunCallbacks
     private void UpdateSliderLabel()
     {
         if (_sliderLabel != null)
-            _sliderLabel.text = $"{_searchValue}$";
+            _sliderLabel.text = $"{_searchValue}$"; // show value
     }
 
     private void InitAwake()
     {
+        // cache objects tagged "phObjects" (buttons, status text, etc.)
         phObjects = new Dictionary<string, GameObject>();
         GameObject[] phobj = GameObject.FindGameObjectsWithTag("phObjects");
         foreach (GameObject g in phobj)
             phObjects.Add(g.name, g);
 
-        _unityObjects = new Dictionary<string, GameObject>();                       // set screens to dictionary
+        // cache screens and other unity objects tagged "UnityObject"
+        _unityObjects = new Dictionary<string, GameObject>();
         GameObject[] unityObj = GameObject.FindGameObjectsWithTag("UnityObject");
         foreach (GameObject obj in unityObj)
         {
@@ -80,9 +85,10 @@ public class MenuLogic : MonoBehaviourPunCallbacks
 
     private void InitStart()
     {
-        _history.Clear();   // for safety
+        _history.Clear();   // reset history
         _currentScreen = Screens.MainMenu;
 
+        // hide all screens that start with "Screen_"
         foreach (var kvp in _unityObjects)
         {
             if (kvp.Key.StartsWith("Screen_"))
@@ -91,21 +97,24 @@ public class MenuLogic : MonoBehaviourPunCallbacks
             }
         }
 
+        // show main menu
         _unityObjects["Screen_MainMenu"].SetActive(true);
 
+        // disable play until connected
         phObjects["Btn_Play"].GetComponent<Button>().interactable = false;
         PhotonNetwork.AutomaticallySyncScene = true;
-        PhotonNetwork.ConnectUsingSettings();   // using api
+        PhotonNetwork.ConnectUsingSettings();   // connect to Photon server
     }
 
     private void UpdateStatus(string txt)
     {
+        // update status text in UI
         phObjects["Text_Status"].GetComponent<TextMeshProUGUI>().text = txt;
     }
 
     private void CreateRoom()
     {
-        // Create room properties — PASSWORD can still be used for manual checks
+        // Build custom room properties. "sv" is used for matching in lobby.
         var roomProperties = new Hashtable
         {
             {"sv", _searchValue},
@@ -118,16 +127,17 @@ public class MenuLogic : MonoBehaviourPunCallbacks
             IsVisible = true,
             IsOpen = true,
             CustomRoomProperties = roomProperties,
-            // Only expose "sv" to the lobby (we will match by "sv" only)
+            // expose only "sv" to the lobby for JoinRandom filter
             CustomRoomPropertiesForLobby = new[] { "sv" }
         };
 
         Debug.Log($"[MenuLogic] Creating room with sv={_searchValue}");
-        PhotonNetwork.CreateRoom(null, roomOptions, TypedLobby.Default);
+        PhotonNetwork.CreateRoom(null, roomOptions, TypedLobby.Default); // create room with options
     }
 
     private void StartGame()
     {
+        // Only master client starts the match when room is full
         UpdateStatus("Starting Game...");
         var room = PhotonNetwork.CurrentRoom;
         if (room == null || !PhotonNetwork.IsMasterClient) return;
@@ -137,24 +147,26 @@ public class MenuLogic : MonoBehaviourPunCallbacks
         bool reachMax = (max > 0) && (players == max);
         if (!reachMax) return;
 
+        // hide room from others and signal start
         room.IsVisible = false;
         room.IsOpen = false;
 
         OnStartGame?.Invoke();
     }
 
+    // Photon callbacks
     public override void OnConnectedToMaster()
     {
         Debug.Log("OnConnectedToMaster");
         UpdateStatus("Connected to server");
-        phObjects["Btn_Play"].GetComponent<Button>().interactable = true;
+        phObjects["Btn_Play"].GetComponent<Button>().interactable = true; // enable play
     }
 
     public override void OnJoinedLobby()
     {
         Debug.Log("OnJoinedLobby");
 
-        // Only use 'sv' for the expected filter — matching uses only this key
+        // try to join random room that matches sv
         var expected = new Hashtable
         {
             {"sv", _searchValue}
@@ -166,6 +178,7 @@ public class MenuLogic : MonoBehaviourPunCallbacks
 
     public override void OnJoinRandomFailed(short returnCode, string message)
     {
+        // if no matching room -> create one
         Debug.Log("<color=yellow>OnJoinRandomFailed</color> returnCode=" + returnCode + " msg=" + message);
         UpdateStatus("Creating Room...");
         CreateRoom();
@@ -176,7 +189,7 @@ public class MenuLogic : MonoBehaviourPunCallbacks
         Debug.Log("OnJoinedRoom");
         UpdateStatus("Joined Room: " + PhotonNetwork.CurrentRoom.Name);
 
-        // Optional: double-check password and disconnect if mismatch
+        // optional password check - leave if mismatch
         if (!string.IsNullOrEmpty(_roomPassword))
         {
             if (PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey("pwd"))
@@ -194,6 +207,7 @@ public class MenuLogic : MonoBehaviourPunCallbacks
 
     public override void OnPlayerEnteredRoom(Player newPlayer)
     {
+        // when someone enters, check start conditions
         StartGame();
     }
 
@@ -201,7 +215,7 @@ public class MenuLogic : MonoBehaviourPunCallbacks
     {
         Debug.Log("Btn_Play");
         phObjects["Btn_Play"].GetComponent<Button>().interactable = false;
-        PhotonNetwork.JoinLobby();
+        PhotonNetwork.JoinLobby(); // join lobby to search rooms
         UpdateStatus("Searching for available rooms...");
     }
 
@@ -212,6 +226,7 @@ public class MenuLogic : MonoBehaviourPunCallbacks
         if (pushHistory)
             _history.Push(_currentScreen);
 
+        // switch visuals
         _unityObjects["Screen_" + _currentScreen].SetActive(false); // turn off current
         _unityObjects["Screen_" + toScreen].SetActive(true);        // turn on new
         _currentScreen = toScreen;                                  // update current
@@ -221,8 +236,8 @@ public class MenuLogic : MonoBehaviourPunCallbacks
     {
         Debug.Log("Btn_Back");
 
-        var prev = _history.Pop();                  // remove the last element
-        ChangeScreen(prev, pushHistory: false);     // change screen back without saving prev screen
+        var prev = _history.Pop();                  // get last screen
+        ChangeScreen(prev, pushHistory: false);     // go back without adding to history
         if (_currentScreen == Screens.MainMenu)
         {
             if (img_bg != null) img_bg.SetActive(true);

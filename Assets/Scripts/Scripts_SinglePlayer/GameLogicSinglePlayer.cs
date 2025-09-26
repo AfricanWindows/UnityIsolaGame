@@ -4,12 +4,13 @@ using UnityEngine;
 using UnityEngine.UI;
 using SlotState = GameBoard.SlotState;  // shorter name
 
+// Single-player game logic: blue = player, red = AI
 public class GameLogicSinglePlayer : MonoBehaviour
 {
     [Header("Prefabs & Scene")]
     public Slot tilePrefab;       // prefab for each board cell
     public Transform boardParent; // parent object for tiles
-    public Camera mainCamera;     // main camera to center board
+    public Camera mainCamera;     // camera to center the board
 
     [Header("Board size")]
     public int width = 5;
@@ -20,41 +21,43 @@ public class GameLogicSinglePlayer : MonoBehaviour
     public Sprite redPlayerSprite;
     public Sprite brokenSprite;
 
-    private Slot[,] tiles;        // all visual tiles
-    private GameBoard _board;     // board state (data)
-    private BoardStateCheck _check; // helper for rules
+    private Slot[,] tiles;        // visual tile instances
+    private GameBoard _board;     // game data (cells, player positions)
+    private BoardStateCheck _check; // helper for move/break rules
 
     private enum Player { P1, P2 }
-    private Player _current = Player.P1; // blue starts
+    private Player _current = Player.P1; // whose logical turn it is (blue starts)
 
     private enum Phase { Move, Break }
-    private Phase phase = Phase.Move;   // first phase is move
+    private Phase phase = Phase.Move;   // first do Move, then Break
 
-    private bool _gameOver = false;
+    private bool _gameOver = false;     // true when game finished
 
     [Header("UI GameOver Popup")]
-    [SerializeField] private GameObject _gameOverPopup; // drag PopupGameOver here
-    [SerializeField] private TextMeshProUGUI _gameOverText;  // text to show winner
-    [SerializeField] private TextMeshProUGUI _whosTurnText;  // text to show winner
+    [SerializeField] private GameObject _gameOverPopup; // popup object for end
+    [SerializeField] private TextMeshProUGUI _gameOverText;  // shows winner
+    [SerializeField] private TextMeshProUGUI _whosTurnText;  // shows whose turn
 
-    private float _aiDelayMove = 0.5f;
-    private float _aiDelayBreak = 0.2f;
+    private float _aiDelayMove = 0.5f;  // delay before AI move (seconds)
+    private float _aiDelayBreak = 0.2f; // delay after AI break
 
     [Header("Sounds")]
     public AudioSource gameoverSound;
     public AudioSource stepSound;
     public AudioSource breakingSound;
 
-    private bool _aiBusy = false;
+    private bool _aiBusy = false;       // prevent input while AI thinking
 
     // ---------------- UNITY EVENTS ----------------
     void OnEnable()
     {
+        // subscribe to tile click and restart events
         Slot.OnClickSlot += OnClickSlot;
         Btn_Restart.OnClickRestart += OnClickRestart;
     }
     void OnDisable()
     {
+        // unsubscribe to avoid leaks
         Slot.OnClickSlot -= OnClickSlot;
         Btn_Restart.OnClickRestart -= OnClickRestart;
     }
@@ -62,28 +65,29 @@ public class GameLogicSinglePlayer : MonoBehaviour
 
     void Start()
     {
+        // hide popup at start
         if (_gameOverPopup != null)
-            _gameOverPopup.SetActive(false); // hide popup at start
-        // build visual grid
+            _gameOverPopup.SetActive(false);
+
+        // create visual tiles
         BuildBoard();
 
-        // create data board
+        // create data structures
         _board = new GameBoard(width, height);
         _check = new BoardStateCheck();
 
-        // put players at start positions
+        // place players on starting positions
         PlacePlayersStart();
 
-        // draw everything
+        // update visuals
         Redraw();
 
         ShowTurnText("BLUE TURN");
 
-
-        // check if already stuck
+        // check immediate lose condition (rare)
         if (CheckImmediateGameOver()) return;
 
-        // if it's red's turn, start AI
+        // if red should move first, start AI
         TryStartRedAI();
     }
 
@@ -93,26 +97,27 @@ public class GameLogicSinglePlayer : MonoBehaviour
         tiles = new Slot[width, height];
         int idx = 0;
 
-        // spawn tiles in grid
+        // spawn tile prefabs in grid and set basic values
         for (int y = 0; y < height; y++)
             for (int x = 0; x < width; x++, idx++)
             {
                 var t = Instantiate(tilePrefab, new Vector3(x, y, 0), Quaternion.identity, boardParent);
                 t.name = "Slot" + idx;
                 t.slotIndex = idx;
-                t.SetSprite(null);
-                t.SetClickable(true);
+                t.SetSprite(null);     // empty visual
+                t.SetClickable(true);  // allow clicks (singleplayer handles when to ignore)
                 tiles[x, y] = t;
             }
 
-        // center camera
+        // center camera on board
         if (mainCamera != null)
             mainCamera.transform.position = new Vector3((width - 1) / 2f, (height - 1) / 2f, -10f);
     }
 
     private void PlacePlayersStart()
     {
-        _board.ResetStart();   // reset board with 2 players
+        // reset data board and flags, place players at default positions
+        _board.ResetStart();   // board: players placed in ResetStart()
         _current = Player.P1;   // blue starts
         phase = Phase.Move;
         _gameOver = false;
@@ -126,26 +131,25 @@ public class GameLogicSinglePlayer : MonoBehaviour
     {
         Debug.Log("GameLogic: Restarting game");
 
-        // hide gameover UI
+        // hide popup if visible
         if (_gameOverPopup != null)
             _gameOverPopup.SetActive(false);
 
-        // reset data
+        // recreate data objects
         _board = new GameBoard(width, height);
         _check = new BoardStateCheck();
         ShowTurnText("BLUE TURN");
 
-
-        // reset players + flags
+        // reset positions and flags
         PlacePlayersStart();
 
-        // redraw the tiles
+        // update visuals to empty board
         Redraw();
 
-        // check gameover at start
+        // immediate gameover check
         if (CheckImmediateGameOver()) return;
 
-        // if red’s turn -> AI
+        // if red to move -> run AI
         TryStartRedAI();
     }
 
@@ -153,44 +157,44 @@ public class GameLogicSinglePlayer : MonoBehaviour
     // ---------------- PLAYER INPUT ----------------
     private void OnClickSlot(int slotIndex)
     {
-        if (_gameOver) return;             // stop if finished
-        if (_current == Player.P2) return; // only blue clicks
-        if (_aiBusy) return;               // ignore while AI is thinking
-        if (!_check.IndexInBounds(_board, slotIndex)) return;
+        if (_gameOver) return;             // ignore after game over
+        if (_current == Player.P2) return; // only blue (player) can click
+        if (_aiBusy) return;               // ignore while AI running
+        if (!_check.IndexInBounds(_board, slotIndex)) return; // invalid index
 
         if (phase == Phase.Move)
         {
-            // MOVE phase
+            // MOVE phase: player moves their piece to an adjacent empty cell
             if (_check.IsLegalMoveForCurrent(_board, true, slotIndex))
             {
                 Vector2Int dst = _check.FromIndex(_board, slotIndex);
                 Vector2Int cur = _board.GetP1Pos();
 
-                // update board
+                // update data board for move
                 _board.Set(cur.x, cur.y, SlotState.Empty);
                 _board.Set(dst.x, dst.y, SlotState.P1);
                 _board.SetP1Pos(dst);
 
                 Redraw();
 
-                // play step sound
+                // play step sound if assigned
                 if (stepSound != null)
                     stepSound.Play();
 
-                // check if red has no moves left
+                // if opponent (red) has no moves -> player wins
                 if (!_check.OpponentHasMove(_board, true))
                 {
                     EndGame(Player.P1, "Red stuck");
                     return;
                 }
 
-                // now go to break phase
+                // switch to break phase (player must break a cell next)
                 phase = Phase.Break;
             }
         }
         else
         {
-            // BREAK phase
+            // BREAK phase: player breaks an empty cell
             if (_check.IsLegalBreakAtIndex(_board, slotIndex))
             {
                 Vector2Int pos = _check.FromIndex(_board, slotIndex);
@@ -201,7 +205,7 @@ public class GameLogicSinglePlayer : MonoBehaviour
 
                 Redraw();
 
-                // check if blue just trapped itself
+                // if player broke and trapped themself -> red wins
                 if (!_board.AreAdjacent(_board.GetP1Pos(), _board.GetP2Pos()) &&
                     !_check.CurrentHasMove(_board, true))
                 {
@@ -209,21 +213,20 @@ public class GameLogicSinglePlayer : MonoBehaviour
                     return;
                 }
 
-                // switch turn to red
+                // switch turn to red (AI)
                 _current = Player.P2;
                 phase = Phase.Move;
 
                 ShowTurnText("RED TURN");
 
-
-                // check if red has any moves
+                // if red has no moves -> player wins
                 if (!_check.CurrentHasMove(_board, false))
                 {
                     EndGame(Player.P1, "Red stuck");
                     return;
                 }
 
-                // start AI
+                // start AI sequence
                 TryStartRedAI();
             }
         }
@@ -239,6 +242,7 @@ public class GameLogicSinglePlayer : MonoBehaviour
     // ---------------- AI LOGIC ----------------
     private void TryStartRedAI()
     {
+        // start the AI coroutine only if game running and it's AI's turn and AI not busy
         if (!_gameOver && _current == Player.P2 && !_aiBusy)
             StartCoroutine(RedTurn());
     }
@@ -247,10 +251,10 @@ public class GameLogicSinglePlayer : MonoBehaviour
     {
         _aiBusy = true;
 
-        // wait a bit before making the AI move
+        // small delay to make AI feel natural
         yield return new WaitForSeconds(_aiDelayMove);
 
-        // if red cannot move, blue wins
+        // if AI has no moves -> blue wins
         if (!_check.CurrentHasMove(_board, false))
         {
             EndGame(Player.P1, "Red stuck");
@@ -258,7 +262,7 @@ public class GameLogicSinglePlayer : MonoBehaviour
             yield break;
         }
 
-        // MOVE
+        // MOVE: pick random legal move for red
         var moves = _board.GetLegalMovesFrom(_board.GetP2Pos());
         Vector2Int move = moves[Random.Range(0, moves.Count)];
         Vector2Int old = _board.GetP2Pos();
@@ -272,10 +276,10 @@ public class GameLogicSinglePlayer : MonoBehaviour
         if (stepSound != null)
             stepSound.Play();
 
-        // optional: short delay after move too
+        // optional short delay between move and break
         yield return new WaitForSeconds(_aiDelayMove);
 
-        // BREAK (pick random empty cell)
+        // BREAK: pick random empty cell to break
         var empties = _board.GetAllEmpty();
         if (empties.Count > 0)
         {
@@ -289,7 +293,7 @@ public class GameLogicSinglePlayer : MonoBehaviour
         Redraw();
         yield return new WaitForSeconds(_aiDelayBreak);
 
-        // check if red trapped itself
+        // check if AI trapped itself after breaking
         if (!_board.AreAdjacent(_board.GetP1Pos(), _board.GetP2Pos()) &&
             !_check.CurrentHasMove(_board, false))
         {
@@ -298,13 +302,13 @@ public class GameLogicSinglePlayer : MonoBehaviour
             yield break;
         }
 
-        // switch back to blue
+        // switch back to player
         _current = Player.P1;
         phase = Phase.Move;
 
         ShowTurnText("BLUE TURN");
 
-        // if blue is stuck now, red wins
+        // if player is stuck now -> AI wins
         if (!_check.CurrentHasMove(_board, true))
         {
             EndGame(Player.P2, "Blue stuck");
@@ -319,7 +323,7 @@ public class GameLogicSinglePlayer : MonoBehaviour
     // ---------------- RENDER ----------------
     private void Redraw()
     {
-        // draw all board cells
+        // update tile visuals based on board data
         for (int y = 0; y < _board.height; y++)
         {
             for (int x = 0; x < _board.width; x++)
@@ -345,7 +349,7 @@ public class GameLogicSinglePlayer : MonoBehaviour
                 else if (state == SlotState.Broken)
                 {
                     tile.SetSprite(brokenSprite);
-                    tile.SetClickable(false);
+                    tile.SetClickable(false); // broken can't be clicked
                 }
             }
         }
@@ -368,6 +372,7 @@ public class GameLogicSinglePlayer : MonoBehaviour
 
     private bool CheckImmediateGameOver()
     {
+        // if current player has no moves at start -> other wins
         bool currentIsP1 = (_current == Player.P1);
         if (!_check.CurrentHasMove(_board, currentIsP1))
         {
