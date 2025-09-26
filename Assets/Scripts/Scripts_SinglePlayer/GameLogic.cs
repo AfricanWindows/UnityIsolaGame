@@ -118,13 +118,38 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
                 t.name = "Slot" + idx;
                 t.slotIndex = idx;
                 t.SetSprite(null);
-                t.SetClickable(true);
+                t.SetClickable(false); // don't allow clicks until turn begins
+
                 tiles[x, y] = t;
             }
 
         if (mainCamera != null)
             mainCamera.transform.position = new Vector3((width - 1) / 2f, (height - 1) / 2f, -10f);
     }
+
+    // new field: global switch that controls whether tiles accept clicks
+    private bool _boardInteractable = false;
+
+    // helper: enable/disable clickable on all tiles
+    private void SetBoardInteractable(bool interactable)
+    {
+        _boardInteractable = interactable;
+        if (tiles == null || _board == null) return;
+
+        for (int y = 0; y < _board.height; y++)
+        {
+            for (int x = 0; x < _board.width; x++)
+            {
+                var tile = tiles[x, y];
+                if (tile == null) continue;
+
+                // only non-broken tiles are clickable when board is interactable
+                bool clickable = interactable && _board.Get(x, y) != SlotState.Broken;
+                tile.SetClickable(clickable);
+            }
+        }
+    }
+
 
     private void PlacePlayersStart()
     {
@@ -181,10 +206,13 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
                     }
                 }
         }
-
+        AssignMySign();
         // Reinitialize data and visuals so players are placed correctly
         PlacePlayersStart();
         Redraw();
+
+        SetBoardInteractable(false);
+
 
         // Force next OnTurnBegins to treat master as first player
         _forceMasterFirst = true;
@@ -342,7 +370,6 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
                 return;
             }
 
-            // In multiplayer there is no local AI; other player's client will act when their OnTurnBegins sets _isMyTurn
         }
     }
 
@@ -367,26 +394,29 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
                 if (state == SlotState.Empty)
                 {
                     tile.SetSprite(null);
-                    tile.SetClickable(true);
+                    tile.SetClickable(_boardInteractable);
                 }
                 else if (state == SlotState.P1)
                 {
                     tile.SetSprite(bluePlayerSprite);
-                    tile.SetClickable(true);
+                    tile.SetClickable(_boardInteractable);
                 }
                 else if (state == SlotState.P2)
                 {
                     tile.SetSprite(redPlayerSprite);
-                    tile.SetClickable(true);
+                    tile.SetClickable(_boardInteractable);
                 }
                 else if (state == SlotState.Broken)
                 {
                     tile.SetSprite(brokenSprite);
                     tile.SetClickable(false);
                 }
+
             }
         }
     }
+
+
 
     // ---------------- GAME OVER ----------------
     private void EndGame(Player winner, string reason)
@@ -527,6 +557,9 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
         }
 
         _isMyTurn = PhotonNetwork.LocalPlayer.ActorNumber == expectedActor;
+
+        SetBoardInteractable(_isMyTurn && !_gameOver);
+
 
         // update turn text to match logical current
         ShowTurnText(_current == Player.P1 ? "<color=blue>BLUE TURN</color>" : "<color=red>RED TURN</color>");
