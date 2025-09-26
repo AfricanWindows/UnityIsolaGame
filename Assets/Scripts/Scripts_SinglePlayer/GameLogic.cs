@@ -10,10 +10,9 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     public PunTurnManager turnMgr;
     private bool _isTimeOut = false;
     private float _startTime;
-    private int _offsetIndex = 0;    // P1 start the game
+    private int _offsetIndex = 0;    // used to align turn -> actor mapping
     private bool _isMyTurn = false;
     private bool _isFirstTurn = true;
-    private bool _isGameOver;
 
     private Dictionary<string, GameObject> unityObjects;
 
@@ -56,6 +55,9 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     public AudioSource stepSound;
     public AudioSource breakingSound;
 
+    // Force master to be first on the next OnTurnBegins (set when restarting)
+    private bool _forceMasterFirst = false;
+
     // ---------------- UNITY EVENTS ----------------
     public override void OnEnable()
     {
@@ -87,6 +89,7 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     {
         InitStart();
     }
+
     private void InitStart()
     {
         if (_gameOverPopup != null)
@@ -135,15 +138,8 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     private void OnClickRestart()
     {
         Debug.Log("GameLogic: Restarting game");
-
-        // InitStart();
         OnLocalRestartMatch();
     }
-
-
-
-
-
 
     private void OnLocalRestartMatch()
     {
@@ -161,7 +157,7 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     // Reset local state to initial (called via RPC on all clients)
     private void ResetMatchLocal()
     {
-        _isGameOver = false;
+        _gameOver = false;
         _board = new GameBoard(width, height);
         _check = new BoardStateCheck();
         _current = Player.P1;
@@ -172,23 +168,29 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
         if (_gameOverPopup != null)
             _gameOverPopup.SetActive(false);
 
-        // reset visuals
-        for (int y = 0; y < _board.height; y++)
-            for (int x = 0; x < _board.width; x++)
-                tiles[x, y].SetSprite(null);
+        // clear existing tile sprites (don't re-instantiate tiles)
+        if (tiles != null)
+        {
+            for (int y = 0; y < _board.height; y++)
+                for (int x = 0; x < _board.width; x++)
+                {
+                    if (tiles[x, y] != null)
+                    {
+                        tiles[x, y].SetSprite(null);
+                        tiles[x, y].SetClickable(true);
+                    }
+                }
+        }
 
-        Redraw();
-
-
-        BuildBoard();
-
-        _board = new GameBoard(width, height);
-        _check = new BoardStateCheck();
-
+        // Reinitialize data and visuals so players are placed correctly
         PlacePlayersStart();
         Redraw();
-        ShowTurnText(_current == Player.P1 ? "<color=blue>BLUE TURN</color>" : "<color=red>RED TURN</color>");
 
+        // Force next OnTurnBegins to treat master as first player
+        _forceMasterFirst = true;
+
+        // update UI immediately to show that Blue will start
+        ShowTurnText("<color=blue>BLUE TURN</color>");
 
         // master starts the turn sequence
         if (PhotonNetwork.IsMasterClient && turnMgr != null)
@@ -198,20 +200,10 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
         }
     }
 
-
-
-
-
-
-
-
-
-
     // ---------------- PLAYER INPUT ----------------
     private void OnClickSlot(int slotIndex)
     {
-        // One big guard: only allow input if game running, my turn, and it's my player turn logically,
-        // and index is in bounds.
+        // guard: only allow input if game running, my turn, and it's my player turn logically, and index is in bounds.
         if (_gameOver || !_isMyTurn || _current != _myPlayer || !_check.IndexInBounds(_board, slotIndex))
             return;
 
@@ -255,7 +247,22 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
         Debug.Log($"[Photon] Sent move: {slotIndex} (finished={finished})");
     }
 
-    // Placement now handles both players depending on _current
+    // ---------------- Helper: explicit move checks ----------------
+    // Use concrete legal-move lists (avoid ambiguity from CurrentHasMove/OpponentHasMove)
+    private bool Player1HasMoves()
+    {
+        var p1pos = _board.GetP1Pos();
+        var moves = _board.GetLegalMovesFrom(p1pos);
+        return moves != null && moves.Count > 0;
+    }
+    private bool Player2HasMoves()
+    {
+        var p2pos = _board.GetP2Pos();
+        var moves = _board.GetLegalMovesFrom(p2pos);
+        return moves != null && moves.Count > 0;
+    }
+
+    // ---------------- Placement (adjusted win logic) ----------------
     private void Placement(int index)
     {
         bool currentIsP1 = (_current == Player.P1);
@@ -282,9 +289,15 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
             Redraw();
             stepSound?.Play();
 
-            // opponent no moves -> current wins
-            if (!_check.OpponentHasMove(_board, currentIsP1))
+            // After performing a MOVE, check opponent's available moves explicitly:
+            bool p1Has = Player1HasMoves();
+            bool p2Has = Player2HasMoves();
+
+            // If opponent (not the current player) has no moves -> current player wins
+            bool opponentHasMoves = currentIsP1 ? p2Has : p1Has;
+            if (!opponentHasMoves)
             {
+                // current player wins
                 EndGame(currentIsP1 ? Player.P1 : Player.P2, "Opponent stuck");
                 return;
             }
@@ -299,10 +312,15 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
             breakingSound?.Play();
             Redraw();
 
-            // check if the current player trapped themself
-            if (!_board.AreAdjacent(_board.GetP1Pos(), _board.GetP2Pos()) &&
-                !_check.CurrentHasMove(_board, currentIsP1))
+            // After performing a BREAK, see if the player who just moved (current) trapped themself.
+            // IMPORTANT: currentIsP1 refers to the player who performed the break (we computed above).
+            bool p1Has = Player1HasMoves();
+            bool p2Has = Player2HasMoves();
+
+            bool currentHasMoves = currentIsP1 ? p1Has : p2Has;
+            if (!_board.AreAdjacent(_board.GetP1Pos(), _board.GetP2Pos()) && !currentHasMoves)
             {
+                // The current player trapped themself -> other player wins
                 EndGame(currentIsP1 ? Player.P2 : Player.P1, "Player trapped themself");
                 return;
             }
@@ -313,9 +331,14 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
 
             ShowTurnText(_current == Player.P1 ? "<color=blue>BLUE TURN</color>" : "<color=red>RED TURN</color>");
 
-            if (!_check.CurrentHasMove(_board, _current == Player.P1))
+            // After switching, check if the new current player has any moves (if none -> other wins)
+            p1Has = Player1HasMoves();
+            p2Has = Player2HasMoves();
+            bool newCurrentHasMoves = (_current == Player.P1) ? p1Has : p2Has;
+            if (!newCurrentHasMoves)
             {
-                EndGame(currentIsP1 ? Player.P2 : Player.P1, "Opponent stuck");
+                // new current can't move -> the other player (who just moved) wins
+                EndGame(_current == Player.P1 ? Player.P2 : Player.P1, "Opponent stuck");
                 return;
             }
 
@@ -332,6 +355,8 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     // ---------------- RENDER ----------------
     private void Redraw()
     {
+        if (_board == null || tiles == null) return;
+
         for (int y = 0; y < _board.height; y++)
         {
             for (int x = 0; x < _board.width; x++)
@@ -379,10 +404,18 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
 
     private bool CheckImmediateGameOver()
     {
-        bool currentIsP1 = (_current == Player.P1);
-        if (!_check.CurrentHasMove(_board, currentIsP1))
+        // explicit check: if P1 has no moves => P2 wins, if P2 has no moves => P1 wins
+        bool p1Has = Player1HasMoves();
+        bool p2Has = Player2HasMoves();
+
+        if (!p1Has)
         {
-            EndGame(Other(_current), $"{NameOf(_current)} stuck");
+            EndGame(Player.P2, "Blue stuck");
+            return true;
+        }
+        if (!p2Has)
+        {
+            EndGame(Player.P1, "Red stuck");
             return true;
         }
         return false;
@@ -392,17 +425,30 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
     private Player Other(Player p) => (p == Player.P1) ? Player.P2 : Player.P1;
     private string NameOf(Player p) => (p == Player.P1) ? "BLUE" : "RED";
 
-    private int GetExpectedActorForTurn(int turn)   // tell us who's actor number for this turn
+    // Returns player order list with MasterClient first, then others sorted ascending
+    private List<int> GetPlayerOrderList()
     {
         var room = PhotonNetwork.CurrentRoom;
-        if (room == null) return -1;
+        var ordered = new List<int>();
+        if (room == null) return ordered;
 
-        var list = new List<int>();
+        int master = PhotonNetwork.MasterClient.ActorNumber;
+        ordered.Add(master);
+
+        var others = new List<int>();
         foreach (var kvp in room.Players)
-            list.Add(kvp.Key);
+        {
+            if (kvp.Key == master) continue;
+            others.Add(kvp.Key);
+        }
+        others.Sort();
+        ordered.AddRange(others);
+        return ordered;
+    }
 
-        list.Sort();
-
+    private int GetExpectedActorForTurn(int turn)   // tell us who's actor number for this turn
+    {
+        var list = GetPlayerOrderList();
         if (list.Count == 0) return -1;
 
         int idx = (turn - 1 + _offsetIndex) % list.Count;
@@ -411,17 +457,15 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
 
     private void AssignMySign()
     {
-        var room = PhotonNetwork.CurrentRoom;
-        if (room == null) return;
-
-        var list = new List<int>(room.Players.Keys);
-        list.Sort();
+        var list = GetPlayerOrderList();
+        if (list.Count == 0) return;
 
         int myIndex = list.IndexOf(PhotonNetwork.LocalPlayer.ActorNumber);
         _myPlayer = (myIndex == 0) ? Player.P1 : Player.P2;
 
         string spriteKey = (_myPlayer == Player.P1) ? "you are BluePlayer" : "you are RedPlayer";
-        _mySignTurnText.text = spriteKey;
+        if (_mySignTurnText != null)
+            _mySignTurnText.text = spriteKey;
         Debug.Log($"[Photon] Assigned sign {spriteKey} (playerIndex={myIndex})");
     }
 
@@ -430,7 +474,7 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
         if (_isFirstTurn)
         {
             _isFirstTurn = false;
-            _isGameOver = false;
+            _gameOver = false;
             AssignMySign();
 
             // UI change example (keep/modify to your prefab names)
@@ -454,27 +498,38 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
         _isTimeOut = false;
         _startTime = Time.time;
 
+        // If we forced master-first on restart, compute offset so that this `turn` maps to master (list[0])
+        if (_forceMasterFirst)
+        {
+            var list = GetPlayerOrderList();
+            if (list.Count > 0)
+            {
+                int n = list.Count;
+                int turnMod = ((turn - 1) % n + n) % n; // safe positive mod
+                _offsetIndex = (n - turnMod) % n;       // (turn-1 + offset) % n == 0 -> yields master
+                _forceMasterFirst = false;
+                Debug.Log($"[Turn] force master first -> offsetIndex={_offsetIndex}");
+            }
+        }
+
         int expectedActor = GetExpectedActorForTurn(turn);
         if (expectedActor < 0)
         {
             Debug.LogError("[Photon] OnTurnBegins: turnOrder not set yet");
         }
 
-        // set logical current player according to turn order
-        var room = PhotonNetwork.CurrentRoom;
-        if (room != null)
+        // set logical current player according to player-order list and expectedActor
+        var list2 = GetPlayerOrderList();
+        if (list2.Count > 0)
         {
-            var list = new List<int>();
-            foreach (var kvp in room.Players) list.Add(kvp.Key);
-            list.Sort();
-
-            // the actor for this turn already computed
-            int actor = expectedActor;
-            int indexInOrder = list.IndexOf(actor);
+            int indexInOrder = list2.IndexOf(expectedActor);
             _current = (indexInOrder == 0) ? Player.P1 : Player.P2;
         }
 
         _isMyTurn = PhotonNetwork.LocalPlayer.ActorNumber == expectedActor;
+
+        // update turn text to match logical current
+        ShowTurnText(_current == Player.P1 ? "<color=blue>BLUE TURN</color>" : "<color=red>RED TURN</color>");
 
         FirstTurnLogic();
         Debug.Log("OnTurnBegins - Is My Turn: " + _isMyTurn + ", Current: " + _current);
@@ -490,7 +545,6 @@ public class GameLogic : MonoBehaviourPunCallbacks, IPunTurnManagerCallbacks
         if (move is int index)
         {
             Debug.Log($"[Photon] OnPlayerMove from {player.ActorNumber}: {index}");
-            // Ensure _current is set correctly for remote: OnTurnBegins should already have set it.
             Placement(index);
         }
     }

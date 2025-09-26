@@ -7,19 +7,19 @@ using UnityEngine.UI;
 using Photon.Pun;
 using Photon.Realtime;
 using TMPro;
+using Hashtable = ExitGames.Client.Photon.Hashtable;
 
 public class MenuLogic : MonoBehaviourPunCallbacks
 {
-
     public static Action OnStartGame;
 
     private Dictionary<string, GameObject> phObjects;
-    private int _searchValue = 100;
+    private int _searchValue = 0;
     private int _maxPlayers = 2;
     private string _roomPassword = "alan";
 
-
-
+    [SerializeField] private Slider _slider;
+    [SerializeField] private TextMeshProUGUI _sliderLabel;
 
     private enum Screens
     {
@@ -32,20 +32,35 @@ public class MenuLogic : MonoBehaviourPunCallbacks
     private Stack<Screens> _history = new Stack<Screens>(); // Stack instead of _prevScreen
     private Dictionary<string, GameObject> _unityObjects;
 
-
-
     void Awake()
     {
         InitAwake();
+
+        if (_slider != null)
+        {
+            _slider.onValueChanged.RemoveAllListeners();
+            _slider.onValueChanged.AddListener(OnSliderChanged);
+            _slider.value = _searchValue;
+            UpdateSliderLabel();
+        }
     }
+
     void Start()
     {
         InitStart();
     }
 
+    private void OnSliderChanged(float v)
+    {
+        _searchValue = Mathf.RoundToInt(v);
+        UpdateSliderLabel();
+    }
 
-
-
+    private void UpdateSliderLabel()
+    {
+        if (_sliderLabel != null)
+            _sliderLabel.text = $"{_searchValue}$";
+    }
 
     private void InitAwake()
     {
@@ -53,7 +68,6 @@ public class MenuLogic : MonoBehaviourPunCallbacks
         GameObject[] phobj = GameObject.FindGameObjectsWithTag("phObjects");
         foreach (GameObject g in phobj)
             phObjects.Add(g.name, g);
-
 
         _unityObjects = new Dictionary<string, GameObject>();                       // set screens to dictionary
         GameObject[] unityObj = GameObject.FindGameObjectsWithTag("UnityObject");
@@ -79,14 +93,10 @@ public class MenuLogic : MonoBehaviourPunCallbacks
 
         _unityObjects["Screen_MainMenu"].SetActive(true);
 
-
-
         phObjects["Btn_Play"].GetComponent<Button>().interactable = false;
         PhotonNetwork.AutomaticallySyncScene = true;
         PhotonNetwork.ConnectUsingSettings();   // using api
-
     }
-
 
     private void UpdateStatus(string txt)
     {
@@ -95,74 +105,68 @@ public class MenuLogic : MonoBehaviourPunCallbacks
 
     private void CreateRoom()
     {
-        var roomProperties = new ExitGames.Client.Photon.Hashtable
+        // Create room properties — PASSWORD can still be used for manual checks
+        var roomProperties = new Hashtable
         {
-            {"sv",_searchValue},
-            {"pwd", _roomPassword }
+            {"sv", _searchValue},
+            {"pwd", _roomPassword}
         };
 
         var roomOptions = new RoomOptions
         {
-            MaxPlayers = _maxPlayers,
+            MaxPlayers = (byte)_maxPlayers,
             IsVisible = true,
             IsOpen = true,
             CustomRoomProperties = roomProperties,
-            CustomRoomPropertiesForLobby = new[] { "sv", "pwd" }   // if want filter
+            // Only expose "sv" to the lobby (we will match by "sv" only)
+            CustomRoomPropertiesForLobby = new[] { "sv" }
         };
 
-        PhotonNetwork.CreateRoom(null, roomOptions, TypedLobby.Default);    // create and enter the room
+        Debug.Log($"[MenuLogic] Creating room with sv={_searchValue}");
+        PhotonNetwork.CreateRoom(null, roomOptions, TypedLobby.Default);
     }
 
     private void StartGame()
     {
-        UpdateStatus("Starting Game...");   // every one get Starting Gmae...
+        UpdateStatus("Starting Game...");
         var room = PhotonNetwork.CurrentRoom;
         if (room == null || !PhotonNetwork.IsMasterClient) return;
 
         int players = room.PlayerCount;
         int max = _maxPlayers;
         bool reachMax = (max > 0) && (players == max);
-        if (reachMax == false)
-            return;
+        if (!reachMax) return;
 
         room.IsVisible = false;
         room.IsOpen = false;
 
         OnStartGame?.Invoke();
-
     }
-
 
     public override void OnConnectedToMaster()
     {
         Debug.Log("OnConnectedToMaster");
         UpdateStatus("Connected to server");
         phObjects["Btn_Play"].GetComponent<Button>().interactable = true;
-
     }
 
     public override void OnJoinedLobby()
     {
         Debug.Log("OnJoinedLobby");
 
-        var expected = new ExitGames.Client.Photon.Hashtable
+        // Only use 'sv' for the expected filter — matching uses only this key
+        var expected = new Hashtable
         {
-            {"sv",_searchValue},
-            {"pwd", _roomPassword}
+            {"sv", _searchValue}
         };
 
-        var op = new OpJoinRandomRoomParams
-        {
-            ExpectedCustomRoomProperties = expected,
-        };
-
-        PhotonNetwork.JoinRandomRoom(op.ExpectedCustomRoomProperties, _maxPlayers);
+        Debug.Log($"[MenuLogic] JoinRandomRoom expected sv={_searchValue}, maxPlayers={_maxPlayers}");
+        PhotonNetwork.JoinRandomRoom(expected, (byte)_maxPlayers);
     }
 
-
-    public override void OnJoinRandomFailed(short returnCode, string message)   // firstly not will working
+    public override void OnJoinRandomFailed(short returnCode, string message)
     {
-        Debug.Log("<color=yellow>OnJoinRandomFailed</color>");
+        Debug.Log("<color=yellow>OnJoinRandomFailed</color> returnCode=" + returnCode + " msg=" + message);
         UpdateStatus("Creating Room...");
         CreateRoom();
     }
@@ -172,38 +176,34 @@ public class MenuLogic : MonoBehaviourPunCallbacks
         Debug.Log("OnJoinedRoom");
         UpdateStatus("Joined Room: " + PhotonNetwork.CurrentRoom.Name);
 
+        // Optional: double-check password and disconnect if mismatch
         if (!string.IsNullOrEmpty(_roomPassword))
         {
-            var expectedHash = PhotonNetwork.CurrentRoom.CustomProperties["pwd"].ToString();
-            var myHash = _roomPassword;
-            if (!string.IsNullOrEmpty(expectedHash) && _roomPassword != expectedHash)
+            if (PhotonNetwork.CurrentRoom.CustomProperties.ContainsKey("pwd"))
             {
-                Debug.Log("Passwords doesnt match");
-                PhotonNetwork.LeaveRoom();
-                return;
+                var expectedHash = PhotonNetwork.CurrentRoom.CustomProperties["pwd"]?.ToString();
+                if (!string.IsNullOrEmpty(expectedHash) && _roomPassword != expectedHash)
+                {
+                    Debug.LogWarning("Passwords don't match - leaving room");
+                    PhotonNetwork.LeaveRoom();
+                    return;
+                }
             }
         }
     }
-
-
-
 
     public override void OnPlayerEnteredRoom(Player newPlayer)
     {
         StartGame();
     }
 
-
     public void Btn_Play()
     {
         Debug.Log("Btn_Play");
         phObjects["Btn_Play"].GetComponent<Button>().interactable = false;
         PhotonNetwork.JoinLobby();
-        UpdateStatus("Searching for an available rooms");
+        UpdateStatus("Searching for available rooms...");
     }
-
-
-
 
     private void ChangeScreen(Screens toScreen, bool pushHistory = true)
     {
@@ -224,7 +224,6 @@ public class MenuLogic : MonoBehaviourPunCallbacks
         var prev = _history.Pop();                  // remove the last element
         ChangeScreen(prev, pushHistory: false);     // change screen back without saving prev screen
     }
-
 
     public void Btn_SinglePlayer()
     {
