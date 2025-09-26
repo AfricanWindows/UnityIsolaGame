@@ -84,11 +84,7 @@ public class GameLogicSinglePlayer : MonoBehaviour
 
         ShowTurnText("BLUE TURN");
 
-        // check immediate lose condition (rare)
-        if (CheckImmediateGameOver()) return;
 
-        // if red should move first, start AI
-        TryStartRedAI();
     }
 
     // ---------------- BUILD ----------------
@@ -157,10 +153,7 @@ public class GameLogicSinglePlayer : MonoBehaviour
     // ---------------- PLAYER INPUT ----------------
     private void OnClickSlot(int slotIndex)
     {
-        if (_gameOver) return;             // ignore after game over
-        if (_current == Player.P2) return; // only blue (player) can click
-        if (_aiBusy) return;               // ignore while AI running
-        if (!_check.IndexInBounds(_board, slotIndex)) return; // invalid index
+        if (_gameOver || _current == Player.P2 || _aiBusy || !_check.IndexInBounds(_board, slotIndex)) return;
 
         if (phase == Phase.Move)
         {
